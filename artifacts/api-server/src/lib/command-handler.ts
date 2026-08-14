@@ -109,11 +109,11 @@ export async function handleCommand(
   const senderNumber = jidBase(sender);
 
   const ownerNumber = config.ownerNumber;
-  const isOwner =
+  let isOwner =
     fromMe || senderNumber === botNumber || (ownerNumber !== "" && senderNumber === ownerNumber);
-  // Sudo users get full access: they may use the bot while it's private, run
-  // owner-only commands, bypass locks/blacklist, and are treated as admins.
-  // The list lives in `bot_config.sudo`.
+  // Sudo users get full owner power: they may use the bot in DM or group,
+  // run owner-only commands, bypass locks/blacklist, and are treated as
+  // admins. The list lives in `bot_config.sudo`.
   const sudoNumbers = parseSudo(config.sudo);
   let isSudo = !isOwner && sudoNumbers.includes(senderNumber);
   // In groups, Baileys 7 may present the sender as an `@lid` identity, so a
@@ -134,6 +134,9 @@ export async function handleCommand(
       }
     }
   }
+
+  // Sudo users inherit every owner privilege — wherever they chat.
+  if (isSudo) isOwner = true;
 
   if (config.mode === "private" && !isOwner && !isSudo) return false;
 
