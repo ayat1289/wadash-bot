@@ -139,6 +139,56 @@ const USAGE = `*Alinks Control System*
 
 export const alinksCommands: Command[] = [
   {
+    name: "add",
+    category: "GROUP",
+    desc: "Add a JID to alinks targets, or add a member to the group by number",
+    groupOnly: true,
+    adminOnly: true,
+    botAdminOnly: true,
+    handler: async (ctx: CommandContext) => {
+      const input = ctx.text.trim();
+      // A full JID (contains "@") → add to alinks target list (the plugin's
+      // forwarding destinations). Digits-only → the original group add behavior
+      // (invite a member into the current group by number).
+      if (input.includes("@")) {
+        const settings = await loadSettings(ctx.tenantId);
+        if (!settings.targetJids.includes(input)) {
+          settings.targetJids.push(input);
+          await saveSettings(settings, ctx.tenantId);
+        }
+        return ctx.reply(`✅ *${input}* added to Alinks targets. (Targets: ${settings.targetJids.length})`);
+      }
+      const num = ctx.text.replace(/[^0-9]/g, "");
+      if (!num) return ctx.reply(`Usage: *${ctx.prefix}add 234XXXXXXXXXX* or *${ctx.prefix}add <jid>@g.us*`);
+      const jid = `${num}@s.whatsapp.net`;
+      let status = "";
+      try {
+        const res = await ctx.sock.groupParticipantsUpdate(ctx.from, [jid], "add");
+        status = String(res?.[0]?.status ?? "");
+      } catch {
+        return ctx.reply(`❌ Couldn't add +${num}.`);
+      }
+      if (status === "200") return ctx.reply(`✅ Added +${num} to the group.`);
+      try {
+        const code = await ctx.sock.groupInviteCode(ctx.from);
+        const subject = ctx.groupMetadata?.subject ?? "the group";
+        if (code) {
+          await ctx.sock.sendMessage(jid, {
+            text: `👋 You've been invited to join *${subject}*:\nhttps://chat.whatsapp.com/${code}`,
+          });
+          return ctx.reply(
+            `⚠️ Couldn't add +${num} directly (their privacy settings block it). I sent them the group invite link instead.`,
+          );
+        }
+      } catch {
+        /* fall through to the generic failure reply */
+      }
+      return ctx.reply(
+        `❌ Couldn't add +${num} (status ${status || "unknown"}). They may only allow joining via an invite link.`,
+      );
+    },
+  },
+  {
     name: "alinks",
     category: "TOOLS",
     desc: "Alinks — forward WhatsApp group invite links to target chats (owner)",
