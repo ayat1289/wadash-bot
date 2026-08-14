@@ -1,0 +1,1026 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: WhatsApp Bot Dashboard API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: whatsapp
+    description: WhatsApp connection management
+  - name: messages
+    description: Message logs
+  - name: contacts
+    description: WhatsApp contacts
+  - name: groups
+    description: WhatsApp groups
+  - name: auto-reply
+    description: Auto-reply rules
+  - name: broadcasts
+    description: Broadcast messages
+  - name: scheduled-statuses
+    description: Scheduled status updates
+  - name: group-settings
+    description: Group moderation settings
+  - name: stats
+    description: Dashboard statistics
+  - name: captures
+    description: Captured deleted & view-once messages
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /whatsapp/status:
+    get:
+      operationId: getWhatsappStatus
+      tags: [whatsapp]
+      summary: Get WhatsApp connection status and QR code
+      responses:
+        "200":
+          description: Connection status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhatsAppStatus"
+
+  /whatsapp/connect:
+    post:
+      operationId: connectWhatsapp
+      tags: [whatsapp]
+      summary: Initiate WhatsApp connection
+      responses:
+        "200":
+          description: Connection initiated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhatsAppStatus"
+
+  /whatsapp/disconnect:
+    post:
+      operationId: disconnectWhatsapp
+      tags: [whatsapp]
+      summary: Disconnect WhatsApp
+      responses:
+        "200":
+          description: Disconnected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhatsAppStatus"
+
+  /whatsapp/pair:
+    post:
+      operationId: requestWhatsappPairingCode
+      tags: [whatsapp]
+      summary: Request a pairing code for phone-number based linking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phoneNumber]
+              properties:
+                phoneNumber:
+                  type: string
+                  description: Phone number in international format without + (e.g. 911234567890)
+      responses:
+        "200":
+          description: Pairing code generated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [code]
+                properties:
+                  code:
+                    type: string
+                    description: 8-character pairing code to enter in WhatsApp
+        "400":
+          description: Missing or invalid phone number
+        "500":
+          description: Failed to generate pairing code
+
+  /messages:
+    get:
+      operationId: listMessages
+      tags: [messages]
+      summary: List logged messages
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [dm, group, all]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Messages list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+
+  /messages/stats:
+    get:
+      operationId: getMessageStats
+      tags: [messages]
+      summary: Get message statistics
+      responses:
+        "200":
+          description: Message stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageStats"
+
+  /captures:
+    get:
+      operationId: listCaptures
+      tags: [captures]
+      summary: List captured deleted & view-once messages
+      parameters:
+        - name: kind
+          in: query
+          schema:
+            type: string
+            enum: [deleted, viewonce, all]
+        - name: chatType
+          in: query
+          schema:
+            type: string
+            enum: [dm, group, all]
+        - name: senderJid
+          in: query
+          schema:
+            type: string
+        - name: chatJid
+          in: query
+          description: Filter to a specific chat / group JID
+          schema:
+            type: string
+        - name: from
+          in: query
+          description: ISO date — only captures at or after this time
+          schema:
+            type: string
+        - name: to
+          in: query
+          description: ISO date — only captures at or before this time
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Captures list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Capture"
+
+  /captures/stats:
+    get:
+      operationId: getCaptureStats
+      tags: [captures]
+      summary: Get capture statistics
+      responses:
+        "200":
+          description: Capture stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaptureStats"
+
+  /captures/senders:
+    get:
+      operationId: listCaptureSenders
+      tags: [captures]
+      summary: List distinct senders that appear in captures
+      responses:
+        "200":
+          description: Sender list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CaptureSender"
+
+  /captures/chats:
+    get:
+      operationId: listCaptureChats
+      tags: [captures]
+      summary: List distinct chats / groups that appear in captures
+      responses:
+        "200":
+          description: Chat list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CaptureChat"
+
+  /contacts:
+    get:
+      operationId: listContacts
+      tags: [contacts]
+      summary: List WhatsApp contacts
+      responses:
+        "200":
+          description: Contacts list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Contact"
+
+  /groups:
+    get:
+      operationId: listGroups
+      tags: [groups]
+      summary: List WhatsApp groups
+      responses:
+        "200":
+          description: Groups list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Group"
+
+  /auto-reply:
+    get:
+      operationId: listAutoReplyRules
+      tags: [auto-reply]
+      summary: List all auto-reply rules
+      responses:
+        "200":
+          description: Rules list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AutoReplyRule"
+    post:
+      operationId: createAutoReplyRule
+      tags: [auto-reply]
+      summary: Create a new auto-reply rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutoReplyRuleInput"
+      responses:
+        "201":
+          description: Rule created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoReplyRule"
+
+  /auto-reply/{id}:
+    patch:
+      operationId: updateAutoReplyRule
+      tags: [auto-reply]
+      summary: Update an auto-reply rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutoReplyRuleUpdate"
+      responses:
+        "200":
+          description: Rule updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoReplyRule"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteAutoReplyRule
+      tags: [auto-reply]
+      summary: Delete an auto-reply rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /broadcasts:
+    get:
+      operationId: listBroadcasts
+      tags: [broadcasts]
+      summary: List broadcast history
+      responses:
+        "200":
+          description: Broadcasts list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Broadcast"
+    post:
+      operationId: createBroadcast
+      tags: [broadcasts]
+      summary: Send a broadcast message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BroadcastInput"
+      responses:
+        "201":
+          description: Broadcast created and queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Broadcast"
+
+  /broadcasts/{id}:
+    get:
+      operationId: getBroadcast
+      tags: [broadcasts]
+      summary: Get broadcast details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Broadcast
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Broadcast"
+        "404":
+          description: Not found
+
+  /scheduled-statuses:
+    get:
+      operationId: listScheduledStatuses
+      tags: [scheduled-statuses]
+      summary: List scheduled statuses
+      responses:
+        "200":
+          description: Scheduled statuses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScheduledStatus"
+    post:
+      operationId: createScheduledStatus
+      tags: [scheduled-statuses]
+      summary: Create a scheduled status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduledStatusInput"
+      responses:
+        "201":
+          description: Scheduled status created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledStatus"
+
+  /scheduled-statuses/{id}:
+    patch:
+      operationId: updateScheduledStatus
+      tags: [scheduled-statuses]
+      summary: Update a scheduled status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduledStatusUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledStatus"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteScheduledStatus
+      tags: [scheduled-statuses]
+      summary: Delete a scheduled status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /scheduled-statuses/{id}/send:
+    post:
+      operationId: sendScheduledStatusNow
+      tags: [scheduled-statuses]
+      summary: Send a scheduled status immediately
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledStatus"
+        "404":
+          description: Not found
+
+  /group-settings:
+    get:
+      operationId: listGroupSettings
+      tags: [group-settings]
+      summary: List all group moderation settings
+      responses:
+        "200":
+          description: Group settings list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GroupSettings"
+
+  /group-settings/{groupId}:
+    get:
+      operationId: getGroupSettings
+      tags: [group-settings]
+      summary: Get moderation settings for a group
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Group settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupSettings"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateGroupSettings
+      tags: [group-settings]
+      summary: Update moderation settings for a group
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupSettingsUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupSettings"
+
+  /stats:
+    get:
+      operationId: getDashboardStats
+      tags: [stats]
+      summary: Get dashboard overview statistics
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /link:
+    get:
+      operationId: getLinkStatus
+      tags: [link]
+      summary: Whether the signed-in account is linked to a WhatsApp tenant
+      responses:
+        "200":
+          description: Link status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkStatus"
+        "401":
+          description: Not authenticated
+    post:
+      operationId: linkAccount
+      tags: [link]
+      summary: Link the signed-in account to a WhatsApp tenant using a one-time code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkAccountRequest"
+      responses:
+        "200":
+          description: Linked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkStatus"
+        "400":
+          description: Invalid or expired code
+        "401":
+          description: Not authenticated
+        "409":
+          description: Account already linked to a different WhatsApp
+    delete:
+      operationId: unlinkAccount
+      tags: [link]
+      summary: Unlink the signed-in account from its WhatsApp tenant
+      responses:
+        "200":
+          description: Unlinked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkStatus"
+        "401":
+          description: Not authenticated
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    LinkStatus:
+      type: object
+      required: [linked]
+      properties:
+        linked:
+          type: boolean
+          description: Whether the signed-in account is linked to a WhatsApp tenant
+
+    LinkAccountRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          description: One-time link code issued by the Telegram bot
+
+    WhatsAppStatus:
+      type: object
+      required: [state]
+      properties:
+        state:
+          type: string
+          enum: [disconnected, connecting, connected]
+        qrCode:
+          type: ["string", "null"]
+        phoneNumber:
+          type: ["string", "null"]
+        profileName:
+          type: ["string", "null"]
+
+    Message:
+      type: object
+      required: [id, fromJid, body, type, timestamp, createdAt]
+      properties:
+        id:
+          type: integer
+        fromJid:
+          type: string
+        fromName:
+          type: ["string", "null"]
+        toJid:
+          type: string
+        body:
+          type: string
+        type:
+          type: string
+          enum: [dm, group]
+        groupName:
+          type: ["string", "null"]
+        timestamp:
+          type: string
+        createdAt:
+          type: string
+
+    MessageStats:
+      type: object
+      required: [totalMessages, dmCount, groupCount, todayCount, activeChats]
+      properties:
+        totalMessages:
+          type: integer
+        dmCount:
+          type: integer
+        groupCount:
+          type: integer
+        todayCount:
+          type: integer
+        activeChats:
+          type: integer
+
+    Capture:
+      type: object
+      required: [id, kind, senderJid, chatJid, chatType, contentType, timestamp, createdAt]
+      properties:
+        id:
+          type: integer
+        kind:
+          type: string
+          enum: [deleted, viewonce]
+        senderJid:
+          type: string
+        senderName:
+          type: ["string", "null"]
+        chatJid:
+          type: string
+        chatName:
+          type: ["string", "null"]
+        chatType:
+          type: string
+          enum: [dm, group]
+        contentType:
+          type: string
+          enum: [text, image, video, audio, sticker, document, other]
+        body:
+          type: ["string", "null"]
+        mediaUrl:
+          type: ["string", "null"]
+        mediaMimetype:
+          type: ["string", "null"]
+        mediaSize:
+          type: ["integer", "null"]
+        timestamp:
+          type: string
+        createdAt:
+          type: string
+
+    CaptureStats:
+      type: object
+      required: [total, deleted, viewonce, withMedia]
+      properties:
+        total:
+          type: integer
+        deleted:
+          type: integer
+        viewonce:
+          type: integer
+        withMedia:
+          type: integer
+
+    CaptureSender:
+      type: object
+      required: [senderJid, count]
+      properties:
+        senderJid:
+          type: string
+        senderName:
+          type: ["string", "null"]
+        count:
+          type: integer
+
+    CaptureChat:
+      type: object
+      required: [chatJid, chatType, count]
+      properties:
+        chatJid:
+          type: string
+        chatName:
+          type: ["string", "null"]
+        chatType:
+          type: string
+          enum: [dm, group]
+        count:
+          type: integer
+
+    Contact:
+      type: object
+      required: [id, jid, name]
+      properties:
+        id:
+          type: integer
+        jid:
+          type: string
+        name:
+          type: string
+        notify:
+          type: ["string", "null"]
+        imgUrl:
+          type: ["string", "null"]
+
+    Group:
+      type: object
+      required: [id, jid, name, participantCount]
+      properties:
+        id:
+          type: integer
+        jid:
+          type: string
+        name:
+          type: string
+        participantCount:
+          type: integer
+        description:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    AutoReplyRule:
+      type: object
+      required: [id, keyword, response, matchType, isActive, scope, createdAt]
+      properties:
+        id:
+          type: integer
+        keyword:
+          type: string
+        response:
+          type: string
+        matchType:
+          type: string
+          enum: [exact, contains, startsWith, regex]
+        isActive:
+          type: boolean
+        scope:
+          type: string
+          enum: [all, dm, group]
+        createdAt:
+          type: string
+
+    AutoReplyRuleInput:
+      type: object
+      required: [keyword, response]
+      properties:
+        keyword:
+          type: string
+          minLength: 1
+        response:
+          type: string
+          minLength: 1
+        matchType:
+          type: string
+          enum: [exact, contains, startsWith, regex]
+        isActive:
+          type: boolean
+        scope:
+          type: string
+          enum: [all, dm, group]
+
+    AutoReplyRuleUpdate:
+      type: object
+      properties:
+        keyword:
+          type: string
+          minLength: 1
+        response:
+          type: string
+          minLength: 1
+        matchType:
+          type: string
+          enum: [exact, contains, startsWith, regex]
+        isActive:
+          type: boolean
+        scope:
+          type: string
+          enum: [all, dm, group]
+
+    Broadcast:
+      type: object
+      required: [id, message, recipients, status, sentCount, failCount, createdAt]
+      properties:
+        id:
+          type: integer
+        message:
+          type: string
+        recipients:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [pending, sending, done, failed]
+        sentCount:
+          type: integer
+        failCount:
+          type: integer
+        createdAt:
+          type: string
+
+    BroadcastInput:
+      type: object
+      required: [message, recipients]
+      properties:
+        message:
+          type: string
+          minLength: 1
+        recipients:
+          type: array
+          items:
+            type: string
+          minItems: 1
+
+    ScheduledStatus:
+      type: object
+      required: [id, text, scheduledAt, status, createdAt]
+      properties:
+        id:
+          type: integer
+        text:
+          type: string
+        mediaUrl:
+          type: ["string", "null"]
+        scheduledAt:
+          type: string
+        status:
+          type: string
+          enum: [pending, sent, failed, cancelled]
+        createdAt:
+          type: string
+
+    ScheduledStatusInput:
+      type: object
+      required: [text, scheduledAt]
+      properties:
+        text:
+          type: string
+          minLength: 1
+        mediaUrl:
+          type: string
+        scheduledAt:
+          type: string
+
+    ScheduledStatusUpdate:
+      type: object
+      properties:
+        text:
+          type: string
+          minLength: 1
+        mediaUrl:
+          type: string
+        scheduledAt:
+          type: string
+        status:
+          type: string
+          enum: [pending, sent, failed, cancelled]
+
+    GroupSettings:
+      type: object
+      required: [id, groupJid, groupName, antiSpam, maxMessagesPerMinute, welcomeMessage, farewellMessage, allowLinks, createdAt]
+      properties:
+        id:
+          type: integer
+        groupJid:
+          type: string
+        groupName:
+          type: string
+        antiSpam:
+          type: boolean
+        maxMessagesPerMinute:
+          type: integer
+        welcomeMessage:
+          type: ["string", "null"]
+        farewellMessage:
+          type: ["string", "null"]
+        allowLinks:
+          type: boolean
+        createdAt:
+          type: string
+
+    GroupSettingsUpdate:
+      type: object
+      properties:
+        antiSpam:
+          type: boolean
+        maxMessagesPerMinute:
+          type: integer
+        welcomeMessage:
+          type: string
+        farewellMessage:
+          type: string
+        allowLinks:
+          type: boolean
+
+    DashboardStats:
+      type: object
+      required: [totalMessages, activeRules, scheduledStatuses, broadcastsSent, groupsManaged, contactsCount, connectionState]
+      properties:
+        totalMessages:
+          type: integer
+        activeRules:
+          type: integer
+        scheduledStatuses:
+          type: integer
+        broadcastsSent:
+          type: integer
+        groupsManaged:
+          type: integer
+        contactsCount:
+          type: integer
+        connectionState:
+          type: string
+          enum: [disconnected, connecting, connected]
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityItem"
+
+    ActivityItem:
+      type: object
+      required: [id, type, description, timestamp]
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [message, auto_reply, broadcast, status_posted, moderation]
+        description:
+          type: string
+        timestamp:
+          type: string

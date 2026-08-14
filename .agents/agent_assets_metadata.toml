@@ -1,0 +1,26 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "FLK053aG_tYraqrJi2Kj3"
+uri = "file://exports/wadash-source.zip"
+type = "unspecified"
+title = "WADash — Node.js source (zip)"
+
+[[outputs]]
+id = "teKDcg2ARtT_a7AHcPsgW"
+uri = "file://dist/sheikh-md-bot.zip"
+type = "unspecified"
+title = "Sheikh MD Bot — updated source (all “Heer” → Sheikh Labeeq)"
+
+[[outputs]]
+id = "xZUmJyeEQ7HwCkny1Y1Dm"
+uri = "file://whatsapp-bot-source.zip"
+type = "unspecified"
+title = "WhatsApp Bot Source Code"
+
+[[outputs]]
+id = "kLhyhalo4ko6xzbiadDQ4"
+uri = "file://exports/whatsapp-bot-source.zip"
+type = "unspecified"
+title = "WhatsApp Bot — Full Source Code"
