@@ -1,7 +1,7 @@
 import type { WASocket, GroupMetadata } from "@whiskeysockets/baileys";
 import { LEGACY_TENANT_ID } from "@workspace/db";
 import { logger } from "./logger";
-import { loadConfig, getBool, parseSudo } from "./config";
+import { loadConfig, getBool, parseSudo, resolveIdentityAliases } from "./config";
 import { getGroupMetadataCached, jidBase, findParticipant } from "./group-meta";
 import { registerAllCommands, findCommand } from "./commands";
 import { loadPlugins } from "./commands/handlers/plugins";
@@ -116,20 +116,38 @@ export async function handleCommand(
   // admins. The list lives in `bot_config.sudo`.
   const sudoNumbers = parseSudo(config.sudo);
   let isSudo = !isOwner && sudoNumbers.includes(senderNumber);
-  // In groups, Baileys 7 may present the sender as an `@lid` identity, so a
-  // phone-number sudo entry won't match `senderNumber` directly. Only when it
-  // actually matters (private mode, in a group, a sudo list exists, and the
-  // direct match missed) resolve the sender to a group participant and check
-  // all of its identity fields. This keeps the common/public path metadata-free.
-  if (config.mode === "private" && !isOwner && !isSudo && isGroup && sudoNumbers.length > 0) {
-    const meta = await getGroupMetadataCached(sock, tenantId, from);
-    const p = meta ? findParticipant(meta.participants, sender) : undefined;
-    if (p) {
-      const alt = p as unknown as Record<string, unknown>;
-      for (const v of [p.id, alt.lid, alt.jid, alt.phoneNumber, alt.pn]) {
-        if (typeof v === "string" && sudoNumbers.includes(jidBase(v))) {
-          isSudo = true;
-          break;
+
+  // Baileys 7 may present the sender as an `@lid` identity while the stored
+  // owner/sudo number is the phone form (or vice versa). Resolve every known
+  // identity for the sender — from the contacts table and, in groups, from the
+  // participant metadata — and match owner/sudo against all of them. Runs in
+  // ANY mode and in DMs too, so a sudo user works everywhere with no limits.
+  if (!isOwner && !isSudo) {
+    const aliases = await resolveIdentityAliases(sender, tenantId);
+    for (const alias of aliases) {
+      if (alias === senderNumber) continue;
+      if (ownerNumber !== "" && alias === ownerNumber) {
+        isOwner = true;
+        break;
+      }
+      if (!isSudo && sudoNumbers.includes(alias)) {
+        isSudo = true;
+      }
+    }
+    // In a group, the participant record may expose phone/lid fields that the
+    // contacts table hasn't learned yet — check those too.
+    if (!isOwner && !isSudo && isGroup) {
+      const meta = await getGroupMetadataCached(sock, tenantId, from);
+      const p = meta ? findParticipant(meta.participants, sender) : undefined;
+      if (p) {
+        const alt = p as unknown as Record<string, unknown>;
+        for (const v of [p.id, alt.lid, alt.jid, alt.phoneNumber, alt.pn]) {
+          if (typeof v !== "string") continue;
+          const n = v.split(":")[0].split("@")[0];
+          if (!n) continue;
+          if (ownerNumber !== "" && n === ownerNumber) isOwner = true;
+          if (sudoNumbers.includes(n)) isSudo = true;
+          if (isOwner) break;
         }
       }
     }

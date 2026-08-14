@@ -1,5 +1,5 @@
-import { db, botConfigTable, LEGACY_TENANT_ID } from "@workspace/db";
-import { and, eq } from "drizzle-orm";
+import { db, botConfigTable, contactsTable, LEGACY_TENANT_ID } from "@workspace/db";
+import { and, eq, or } from "drizzle-orm";
 
 export type BotConfigData = {
   prefix: string;
@@ -117,4 +117,46 @@ export async function removeSudoNumber(
   if (!list.includes(clean)) return false;
   await setConfig(SUDO_KEY, list.filter((n) => n !== clean).join(","), tenantId);
   return true;
+}
+
+/**
+ * Resolve every known bare-number identity for a sender JID within a tenant.
+ * Baileys 7 exposes users as `@lid` OR phone (`@s.whatsapp.net`) identities,
+ * and a sudo/owner number may be stored in either form. This returns the
+ * sender's own number plus any aliases recorded in the contacts table
+ * (populated from `contacts.update` and group metadata), so an owner/sudo
+ * match succeeds no matter which identity form the message arrived as.
+ */
+export async function resolveIdentityAliases(
+  jid: string | null | undefined,
+  tenantId: number = LEGACY_TENANT_ID,
+): Promise<string[]> {
+  const base = (jid ?? "").split(":")[0].split("@")[0];
+  if (!base) return [];
+  const aliases = new Set<string>([base]);
+  try {
+    const rows = await db
+      .select({ jid: contactsTable.jid, lid: contactsTable.lid, phoneNumber: contactsTable.phoneNumber })
+      .from(contactsTable)
+      .where(
+        and(
+          eq(contactsTable.tenantId, tenantId),
+          or(
+            eq(contactsTable.jid, jid ?? ""),
+            eq(contactsTable.jid, base + "@lid"),
+            eq(contactsTable.jid, base + "@s.whatsapp.net"),
+            eq(contactsTable.lid, base + "@lid"),
+            eq(contactsTable.phoneNumber, base + "@s.whatsapp.net"),
+          ),
+        ),
+      );
+    for (const r of rows) {
+      for (const v of [r.jid, r.lid, r.phoneNumber]) {
+        if (v) aliases.add(v.split(":")[0].split("@")[0]);
+      }
+    }
+  } catch {
+    /* alias lookup is best-effort */
+  }
+  return [...aliases];
 }

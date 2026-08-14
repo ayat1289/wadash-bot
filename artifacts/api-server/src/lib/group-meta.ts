@@ -1,4 +1,5 @@
 import type { WASocket, GroupMetadata } from "@whiskeysockets/baileys";
+import { db, contactsTable } from "@workspace/db";
 import { logger } from "./logger";
 
 /**
@@ -89,10 +90,50 @@ export async function getGroupMetadataCached(
   try {
     const meta = await sock.groupMetadata(jid);
     cache.set(key, { meta, at: now });
+    void harvestParticipantAliases(tenantId, meta);
     return meta;
   } catch (err) {
     logger.warn({ err, tenantId, jid }, "Failed to fetch group metadata");
     return hit?.meta ?? null;
+  }
+}
+
+/**
+ * Persist every LID↔phone identity pair found in group participant metadata so
+ * owner/sudo matching can resolve either form. Fire-and-forget; failures are
+ * swallowed. Only rows where a participant exposes both a LID and a phone
+ * number add new information.
+ */
+export async function harvestParticipantAliases(tenantId: number, meta: GroupMetadata | null): Promise<void> {
+  if (!meta?.participants) return;
+  try {
+    for (const p of meta.participants) {
+      const alt = p as unknown as Record<string, unknown>;
+      const lid = (typeof alt.lid === "string" ? alt.lid : p.id.endsWith("@lid") ? p.id : "").split(":")[0];
+      const pn =
+        (typeof alt.phoneNumber === "string"
+          ? alt.phoneNumber
+          : !p.id.endsWith("@lid") && p.id.endsWith("@s.whatsapp.net")
+            ? p.id
+            : "").split(":")[0];
+      if (!lid || !pn || lid === pn) continue;
+      await db
+        .insert(contactsTable)
+        .values({
+          tenantId,
+          jid: lid + "@lid",
+          name: p.notify ?? jidBase(p.id),
+          notify: p.notify ?? null,
+          lid: lid + "@lid",
+          phoneNumber: pn + "@s.whatsapp.net",
+        })
+        .onConflictDoUpdate({
+          target: [contactsTable.tenantId, contactsTable.jid],
+          set: { lid: lid + "@lid", phoneNumber: pn + "@s.whatsapp.net" },
+        });
+    }
+  } catch (err) {
+    logger.warn({ err, tenantId }, "Alias harvest failed");
   }
 }
 

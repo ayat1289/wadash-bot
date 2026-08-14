@@ -1558,10 +1558,17 @@ function wireSocketEvents(
           jid: contact.id,
           name: contact.notify ?? contact.id.split("@")[0],
           notify: contact.notify ?? null,
+          lid: contact.lid ?? (contact.id.endsWith("@lid") ? contact.id : null),
+          phoneNumber: contact.phoneNumber ?? (contact.id.endsWith("@s.whatsapp.net") ? contact.id : null),
         })
         .onConflictDoUpdate({
           target: [contactsTable.tenantId, contactsTable.jid],
-          set: { name: contact.notify ?? contact.id.split("@")[0], notify: contact.notify ?? null },
+          set: {
+            name: contact.notify ?? contact.id.split("@")[0],
+            notify: contact.notify ?? null,
+            lid: contact.lid ?? (contact.id.endsWith("@lid") ? contact.id : null),
+            phoneNumber: contact.phoneNumber ?? (contact.id.endsWith("@s.whatsapp.net") ? contact.id : null),
+          },
         });
     }
   });

@@ -13,6 +13,8 @@ export const contactsTable = pgTable(
     jid: text("jid").notNull(),
     name: text("name").notNull(),
     notify: text("notify"),
+    lid: text("lid"),
+    phoneNumber: text("phone_number"),
     imgUrl: text("img_url"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
