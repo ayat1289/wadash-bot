@@ -75,6 +75,10 @@ export async function handleAlinksForward(
     const settings = await loadSettings(tenantId);
     if (!settings.enabled || !settings.targetJids.length || !body) return;
 
+    // DMs only: never forward a link posted inside a group back out.
+    const remote = msg.key.remoteJid ?? "";
+    if (remote.endsWith("@g.us")) return;
+
     const matches = body.match(LINK_REGEX);
     if (!matches) return;
 
