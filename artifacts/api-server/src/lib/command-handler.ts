@@ -4,12 +4,14 @@ import { logger } from "./logger";
 import { loadConfig, getBool, parseSudo } from "./config";
 import { getGroupMetadataCached, jidBase, findParticipant } from "./group-meta";
 import { registerAllCommands, findCommand } from "./commands";
+import { loadPlugins } from "./commands/handlers/plugins";
 import { allMenuCommands } from "./commands/menu-data";
 import { customCommands } from "./commands/handlers/extras";
 import { lockedCommands, blacklist } from "./commands/handlers/extras2";
 import type { CommandContext, WAMessage } from "./commands/types";
 
 registerAllCommands();
+void loadPlugins().catch((err) => logger.warn({ err }, "Plugin startup load failed"));
 const knownMenuCommands = allMenuCommands();
 /**
  * Pulls the selected id of a tapped interactive button (quick-reply / template /
@@ -109,8 +111,9 @@ export async function handleCommand(
   const ownerNumber = config.ownerNumber;
   const isOwner =
     fromMe || senderNumber === botNumber || (ownerNumber !== "" && senderNumber === ownerNumber);
-  // Sudo users may use the bot while it's private, but are NOT owners (ownerOnly
-  // commands stay owner-exclusive). The list lives in `bot_config.sudo`.
+  // Sudo users get full access: they may use the bot while it's private, run
+  // owner-only commands, bypass locks/blacklist, and are treated as admins.
+  // The list lives in `bot_config.sudo`.
   const sudoNumbers = parseSudo(config.sudo);
   let isSudo = !isOwner && sudoNumbers.includes(senderNumber);
   // In groups, Baileys 7 may present the sender as an `@lid` identity, so a
@@ -148,11 +151,11 @@ export async function handleCommand(
   const cmd = findCommand(command);
   const gKey = `${tenantId}:${jidBase(from)}`;
   const locked = lockedCommands.get(gKey);
-  if (cmd && locked?.has(command) && !isOwner) {
+  if (cmd && locked?.has(command) && !isOwner && !isSudo) {
     await reply(`🔒 *${command}* is locked in this group.`);
     return true;
   }
-  if (blacklist.has(`${tenantId}:${senderNumber}`) && !isOwner) {
+  if (blacklist.has(`${tenantId}:${senderNumber}`) && !isOwner && !isSudo) {
     await reply("🚫 You're blacklisted from using this bot.");
     return true;
   }
@@ -184,7 +187,7 @@ export async function handleCommand(
       isBotAdmin = Boolean(botP?.admin);
     }
   }
-  if (isOwner) isAdmin = true;
+  if (isOwner || isSudo) isAdmin = true;
 
   const ctx: CommandContext = {
     sock,
@@ -211,7 +214,7 @@ export async function handleCommand(
     react,
   };
 
-  if (cmd.ownerOnly && !isOwner) {
+  if (cmd.ownerOnly && !isOwner && !isSudo) {
     await reply("🚫 This command is for the *owner* only.");
     return true;
   }
