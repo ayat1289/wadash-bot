@@ -15,6 +15,7 @@ import { imageCommands } from "./handlers/image";
 import { religionCommands } from "./handlers/religion";
 import { aiCommands } from "./handlers/ai";
 import { ai2Commands } from "./handlers/ai2";
+import { alinksCommands } from "./handlers/alinks";
 import { downloadCommands } from "./handlers/download";
 import { audioCommands } from "./handlers/audioeffects";
 import { sportsCommands } from "./handlers/sports";
@@ -75,6 +76,7 @@ export function registerAllCommands(): void {
   register(extras2Commands);
   register(groups2Commands);
   register(ai2Commands);
+  register(alinksCommands);
   registered = true;
 }
 

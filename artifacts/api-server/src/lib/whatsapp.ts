@@ -30,6 +30,7 @@ import { recordActivity } from "./activity-store";
 import { handleDownloadSelection } from "./commands/handlers/download";
 import { handleGameInput } from "./commands/handlers/games-interactive";
 import { handleAfk } from "./commands/handlers/afk";
+import { handleAlinksForward } from "./commands/handlers/alinks";
 import { loadConfig, setConfig, getBool, getConfig } from "./config";
 import {
   getGroupMetadataCached,
@@ -1404,6 +1405,13 @@ function wireSocketEvents(
       if (isGroup && !msg.key.fromMe && body) {
         const removed = await enforceAntiLink(session, fromJid, msg, body);
         if (removed) continue;
+      }
+
+      // Alinks: when enabled (owner-configured), forward any WhatsApp group
+      // invite links seen in incoming messages to the configured target chats.
+      // Fire-and-forget — never blocks dispatch; errors are swallowed inside.
+      if (session.socket && !msg.key.fromMe && body) {
+        void handleAlinksForward(session.socket, tenantId, msg, body);
       }
 
       // Anti-badword: a group member who sends a banned word is removed

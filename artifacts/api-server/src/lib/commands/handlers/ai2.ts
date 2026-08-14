@@ -8,13 +8,16 @@ import { tryAcquire } from "../limiter";
 import { hasMedia, downloadMedia } from "../media-utils";
 import { logger } from "../../logger";
 
-const pdfParse = (mod: typeof import("pdf-parse")) => mod.default ?? mod;
-
 async function extractPdfText(buf: Buffer): Promise<string> {
   try {
-    const mod = await import("pdf-parse");
-    const result = await pdfParse(mod)(buf);
-    return result?.text ?? "";
+    const { PDFParse } = await import("pdf-parse");
+    const parser = new PDFParse({ data: buf });
+    try {
+      const result = await parser.getText();
+      return result?.text ?? "";
+    } finally {
+      await parser.destroy();
+    }
   } catch (err) {
     logger.warn({ err }, "pdf-parse failed");
     return "";
@@ -316,7 +319,11 @@ export const ai2Commands: Command[] = [
     category: "AI",
     desc: "Ask a question about a PDF",
     handler: async (ctx) => {
-      if (!hasMedia(ctx, "document")) return ctx.reply("📄 Send or reply to a *PDF* with `.askpdf <question>`");
+      const hasDoc = Boolean(
+        ctx.msg.message?.documentMessage ||
+          ctx.msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.documentMessage,
+      );
+      if (!hasDoc) return ctx.reply("📄 Send or reply to a *PDF* with `.askpdf <question>`");
       const slot = tryAcquire(`${ctx.tenantId}:${ctx.sender}`);
       if (!slot.ok) return ctx.reply(slot.reason);
       try {
@@ -345,7 +352,11 @@ export const ai2Commands: Command[] = [
     category: "AI",
     desc: "Summarize a PDF",
     handler: async (ctx) => {
-      if (!hasMedia(ctx, "document")) return ctx.reply("📄 Send or reply to a *PDF* with `.summarizepdf`");
+      const hasDoc = Boolean(
+        ctx.msg.message?.documentMessage ||
+          ctx.msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.documentMessage,
+      );
+      if (!hasDoc) return ctx.reply("📄 Send or reply to a *PDF* with `.summarizepdf`");
       const slot = tryAcquire(`${ctx.tenantId}:${ctx.sender}`);
       if (!slot.ok) return ctx.reply(slot.reason);
       try {
