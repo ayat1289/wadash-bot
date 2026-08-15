@@ -1,7 +1,13 @@
 import type { Command } from "../types";
-import { setConfig, getConfig } from "../../config";
-import { getGroupMetadataCached } from "../../group-meta";
+import { setConfig } from "../../config";
 import { logger } from "../../logger";
+import {
+  downloadMediaMessage,
+  generateWAMessageContent,
+  generateWAMessageFromContent,
+  type proto,
+  type WAMessage,
+} from "@whiskeysockets/baileys";
 
 function toggle(name: string, aliases: string[] | undefined, label: string, keyPrefix: string): Command {
   return {
@@ -25,59 +31,99 @@ export const groupStatusCommands: Command[] = [
     name: "gst",
     aliases: ["groupstatus"],
     category: "GROUPSTATUS",
-    desc: "Post a WhatsApp group invite to your status",
+    desc: "Update group status",
     handler: async (ctx) => {
-      const link = ctx.args[0];
-
-      if (!link || !link.includes("chat.whatsapp.com/")) {
-        return ctx.reply(`❌ Usage:\n${ctx.prefix}gst https://chat.whatsapp.com/XXXXXXXX`);
+      const ci = ctx.msg.message?.extendedTextMessage?.contextInfo;
+      const quoted = ci?.quotedMessage;
+      if (!quoted) {
+        await ctx.reply("Reply to a message with *" + ctx.prefix + "gst*");
+        return;
       }
 
-      try {
-        const code = link.split("chat.whatsapp.com/")[1].split(/[?\s]/)[0];
+      // Identify what was replied to: image, video, or text.
+      let kind: "image" | "video" | "text" | null = null;
+      if (quoted.imageMessage) kind = "image";
+      else if (quoted.videoMessage) kind = "video";
+      else if (quoted.conversation || quoted.extendedTextMessage?.text) kind = "text";
 
-        // Resolve the real group from the invite code so `jid`/`subject` match
-        // the group the code belongs to. Baileys 7 maps `text` -> caption,
-        // `jid` -> groupJid and `subject` -> groupName on the wire; it also
-        // fetches the profile picture from `jid` internally, so the resolved
-        // JID keeps the send from throwing and matches what WhatsApp expects.
-        let meta = ctx.groupMetadata ?? null;
+      if (!kind) {
+        await ctx.reply("Reply to a message with *" + ctx.prefix + "gst*");
+        return;
+      }
+
+      // Rebuild the quoted message's own key so media can be re-uploaded.
+      const target = {
+        key: {
+          remoteJid: ctx.from,
+          fromMe: false,
+          id: ci?.stanzaId ?? undefined,
+          participant: ci?.participant ?? undefined,
+        },
+        message: quoted,
+      } as WAMessage;
+
+      let media: Buffer | null = null;
+      if (kind !== "text") {
+        media = (await downloadMediaMessage(
+          target,
+          "buffer",
+          {},
+          { logger, reuploadRequest: ctx.sock.updateMediaMessage },
+        )) as Buffer;
+      }
+
+      const caption =
+        kind === "image"
+          ? quoted.imageMessage?.caption ?? undefined
+          : kind === "video"
+            ? quoted.videoMessage?.caption ?? undefined
+            : undefined;
+      const quotedText = quoted.conversation || quoted.extendedTextMessage?.text || "";
+
+      const groups = Object.values(await ctx.sock.groupFetchAllParticipating());
+      let updated = 0;
+
+      for (const g of groups) {
         try {
-          meta = await ctx.sock.groupGetInviteInfo(code);
-        } catch (err) {
-          logger.warn({ err }, "gst: invite info lookup failed, falling back to current group");
-          if (!meta && ctx.from.endsWith("@g.us")) {
-            meta = await getGroupMetadataCached(ctx.sock, ctx.tenantId, ctx.from);
+          const gid = g.id;
+          if (!gid) continue;
+
+          const inner = (await generateWAMessageContent(
+            kind === "text"
+              ? { text: quotedText }
+              : kind === "image"
+                ? { image: media as Buffer, caption }
+                : { video: media as Buffer, caption },
+            {
+              jid: gid,
+              upload: ctx.sock.waUploadToServer,
+              getProfilePicUrl: ctx.sock.profilePictureUrl,
+              getCallLink: ctx.sock.createCallLink,
+            },
+          )) as proto.Message;
+
+          const innerKey = Object.keys(inner).find(
+            (k) => k === "conversation" || k.endsWith("Message"),
+          );
+          if (innerKey && inner[innerKey]) {
+            const innerObj = inner[innerKey] as Record<string, unknown>;
+            const existingCtx = (innerObj.contextInfo ?? {}) as Record<string, unknown>;
+            innerObj.contextInfo = { ...existingCtx, isGroupStatus: true };
           }
+
+          const wrapped = { groupStatusMessageV2: { message: inner } };
+          const fullMsg = generateWAMessageFromContent(gid, wrapped, {
+            timestamp: new Date(),
+            userJid: ctx.sock.user?.id,
+          });
+          await ctx.sock.relayMessage(gid, fullMsg.message, { messageId: fullMsg.key.id });
+          updated++;
+        } catch (error) {
+          logger.warn({ err: error, group: g.id }, "gst: group status send failed");
         }
-
-        const jid = meta?.id ?? (ctx.from.endsWith("@g.us") ? ctx.from : "");
-
-        logger.info(
-          {
-            code,
-            groupJid: jid,
-            groupSubject: meta?.subject ?? "Join Our Group",
-            from: ctx.from,
-          },
-          "gst: posting group invite to status",
-        );
-
-        await ctx.sock.sendMessage("status@broadcast", {
-          groupInvite: {
-            inviteCode: code,
-            inviteExpiration: Math.floor(Date.now() / 1000) + 86400,
-            text: "💗 JOIN ACTIVE PEEPS 💀\n\n• PRO CHATTING ZONE •\n\n💀 SHARE GROUP LINK 💗",
-            jid,
-            subject: meta?.subject ?? "Join Our Group",
-          },
-        });
-
-        await ctx.reply("✅ Group invite added to WhatsApp Status.");
-      } catch (error) {
-        logger.error({ err: error }, "gst: failed to post group status");
-        await ctx.reply("❌ Failed to add group status.");
       }
+
+      await ctx.reply(`Updated *${updated}*`);
     },
   },
   toggle("welcome", undefined, "Welcome messages", "welcome"),
