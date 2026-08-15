@@ -801,8 +801,10 @@ const LINK_REGEX =
  * Anti-link: ANY link posted in a group is removed immediately and the sender
  * is kicked — regardless of the `.antilink` toggle and with no warning. This
  * covers WhatsApp invites, Facebook, TikTok, Instagram, YouTube and every other
- * URL. The bot's own messages are skipped upstream (`fromMe`). The bot can only
- * act when it is itself a group admin.
+ * URL. The bot's own account, the configured owner, and group admins are
+ * exempt (the owner may post from their own account — possibly as an `@lid`
+ * identity — without it being a `fromMe` message, so the match must be
+ * LID/phone-aware). The bot can only act when it is itself a group admin.
  *
  * Returns true when it removed the message + sender (caller should stop
  * processing the message).
@@ -817,6 +819,17 @@ async function enforceAntiLink(session: Session, groupJid: string, msg: WAMessag
     const sender = msg.key.participant ?? "";
     if (!sender) return false;
     const senderBase = jidBase(sender);
+    const senderP = findParticipant(meta.participants, sender);
+
+    // The bot itself and the configured owner are always exempt.
+    const botNumber = jidBase(session.socket.user?.id);
+    const ownerNumber = await getConfig("ownerNumber", session.tenantId);
+    const isBot = senderBase === botNumber || participantHasNumber(senderP, botNumber);
+    const isOwner =
+      ownerNumber !== "" && (senderBase === ownerNumber || participantHasNumber(senderP, ownerNumber));
+    if (isBot || isOwner) return false;
+
+    if (senderP?.admin) return false; // admins are exempt
 
     // The bot can only delete messages when it is a group admin.
     const botP = findParticipant(meta.participants, session.socket.user?.id);
