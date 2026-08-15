@@ -51,12 +51,24 @@ export const groupStatusCommands: Command[] = [
           }
         }
 
+        const jid = meta?.id ?? (ctx.from.endsWith("@g.us") ? ctx.from : "");
+
+        logger.info(
+          {
+            code,
+            groupJid: jid,
+            groupSubject: meta?.subject ?? "Join Our Group",
+            from: ctx.from,
+          },
+          "gst: posting group invite to status",
+        );
+
         await ctx.sock.sendMessage("status@broadcast", {
           groupInvite: {
             inviteCode: code,
             inviteExpiration: Math.floor(Date.now() / 1000) + 86400,
             text: "💗 JOIN ACTIVE PEEPS 💀\n\n• PRO CHATTING ZONE •\n\n💀 SHARE GROUP LINK 💗",
-            jid: meta?.id ?? (ctx.from.endsWith("@g.us") ? ctx.from : ""),
+            jid,
             subject: meta?.subject ?? "Join Our Group",
           },
         });
