@@ -792,39 +792,45 @@ async function handleAntiDemote(
   }
 }
 
-const LINK_REGEX = /chat\.whatsapp\.com\/[0-9A-Za-z]+/i;
+// Matches any URL the sender may post: http(s)://..., www. subdomains, and
+// bare domains/paths such as "facebook.com", "tiktok.com/@x", "chat.whatsapp.com/...".
+const LINK_REGEX =
+  /(?:https?:\/\/|www\.)[^\s<>]+|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s<>]*)?/i;
 
-/** Returns true if the message was a link violation that was removed. */
+/**
+ * Anti-link: ANY link posted in a group is removed immediately and the sender
+ * is kicked — regardless of the `.antilink` toggle and with no warning. This
+ * covers WhatsApp invites, Facebook, TikTok, Instagram, YouTube and every other
+ * URL. The bot's own messages are skipped upstream (`fromMe`). The bot can only
+ * act when it is itself a group admin.
+ *
+ * Returns true when it removed the message + sender (caller should stop
+ * processing the message).
+ */
 async function enforceAntiLink(session: Session, groupJid: string, msg: WAMessage, body: string): Promise<boolean> {
   try {
-    if (!LINK_REGEX.test(body)) return false;
-    const enabled = await getBool(`antilink:${groupJid}`, session.tenantId);
-    if (!enabled || !session.socket) return false;
+    if (!LINK_REGEX.test(body) || !session.socket) return false;
 
     const meta = await getGroupMetadataCached(session.socket, session.tenantId, groupJid);
     if (!meta) return false;
 
     const sender = msg.key.participant ?? "";
+    if (!sender) return false;
     const senderBase = jidBase(sender);
-    const senderP = findParticipant(meta.participants, sender);
-    if (senderP?.admin) return false; // admins are exempt
 
     // The bot can only delete messages when it is a group admin.
     const botP = findParticipant(meta.participants, session.socket.user?.id);
     if (!botP?.admin) {
-      logger.warn({ groupJid, tenantId: session.tenantId }, "Anti-link is enabled but the bot is not a group admin");
+      logger.warn({ groupJid, tenantId: session.tenantId }, "Anti-link is active but the bot is not a group admin");
       return false;
     }
 
     await session.socket.sendMessage(groupJid, { delete: msg.key });
-    await session.socket.sendMessage(groupJid, {
-      text: `🛡️ @${senderBase} group links are not allowed here.`,
-      mentions: [sender],
-    });
+    await session.socket.groupParticipantsUpdate(groupJid, [sender], "remove");
     await db.insert(activityLogTable).values({
       tenantId: session.tenantId,
       type: "message",
-      description: `Anti-link removed a link from ${senderBase}`,
+      description: `Anti-link removed a link from ${senderBase} and kicked them`,
     });
     return true;
   } catch (err) {
