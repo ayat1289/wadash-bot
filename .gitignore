@@ -53,3 +53,6 @@ Thumbs.db
 
 # WhatsApp auth/session state — runtime secrets (committed by explicit request for backup)
 
+
+# Runtime captured media (sticker/image capture temp files)
+artifacts/api-server/data/captures/
