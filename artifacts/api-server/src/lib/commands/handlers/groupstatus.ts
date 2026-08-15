@@ -36,21 +36,27 @@ export const groupStatusCommands: Command[] = [
       try {
         const code = link.split("chat.whatsapp.com/")[1].split(/[?\s]/)[0];
 
-        // Baileys 7 maps `text` -> caption, `jid` -> groupJid and `subject` ->
-        // groupName on the wire. It also fetches the profile picture from `jid`
-        // internally, so a valid JID keeps the send from throwing.
-        const meta = ctx.groupMetadata
-          ? ctx.groupMetadata
-          : ctx.from.endsWith("@g.us")
-            ? await getGroupMetadataCached(ctx.sock, ctx.tenantId, ctx.from)
-            : null;
+        // Resolve the real group from the invite code so `jid`/`subject` match
+        // the group the code belongs to. Baileys 7 maps `text` -> caption,
+        // `jid` -> groupJid and `subject` -> groupName on the wire; it also
+        // fetches the profile picture from `jid` internally, so the resolved
+        // JID keeps the send from throwing and matches what WhatsApp expects.
+        let meta = ctx.groupMetadata ?? null;
+        try {
+          meta = await ctx.sock.groupGetInviteInfo(code);
+        } catch (err) {
+          logger.warn({ err }, "gst: invite info lookup failed, falling back to current group");
+          if (!meta && ctx.from.endsWith("@g.us")) {
+            meta = await getGroupMetadataCached(ctx.sock, ctx.tenantId, ctx.from);
+          }
+        }
 
         await ctx.sock.sendMessage("status@broadcast", {
           groupInvite: {
             inviteCode: code,
             inviteExpiration: Math.floor(Date.now() / 1000) + 86400,
             text: "💗 JOIN ACTIVE PEEPS 💀\n\n• PRO CHATTING ZONE •\n\n💀 SHARE GROUP LINK 💗",
-            jid: ctx.from.endsWith("@g.us") ? ctx.from : (meta?.id ?? ""),
+            jid: meta?.id ?? (ctx.from.endsWith("@g.us") ? ctx.from : ""),
             subject: meta?.subject ?? "Join Our Group",
           },
         });
