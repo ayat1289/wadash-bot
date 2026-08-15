@@ -184,6 +184,9 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../../lib/db
+      '@workspace/integrations-gemini':
+        specifier: workspace:*
+        version: link:../../lib/integrations-gemini
       '@workspace/integrations-openai-ai-server':
         specifier: workspace:*
         version: link:../../lib/integrations-openai-ai-server
@@ -685,6 +688,16 @@ importers:
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
+
+  lib/integrations-gemini:
+    dependencies:
+      openai:
+        specifier: ^6.27.0
+        version: 6.44.0(ws@8.21.0)(zod@3.25.76)
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.6.2
 
   lib/integrations-openai-ai-server:
     dependencies:

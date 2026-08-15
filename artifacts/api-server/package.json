@@ -16,6 +16,7 @@
     "@whiskeysockets/baileys": "7.0.0-rc13",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
+    "@workspace/integrations-gemini": "workspace:*",
     "@workspace/integrations-openai-ai-server": "workspace:*",
     "@workspace/integrations-openrouter-ai": "workspace:*",
     "cookie-parser": "^1.4.7",

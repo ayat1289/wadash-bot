@@ -1,5 +1,5 @@
 import type { Command } from "../types";
-import { openrouter } from "@workspace/integrations-openrouter-ai";
+import { gemini, GEMINI_MODEL } from "@workspace/integrations-gemini";
 import { generateImageBuffer } from "@workspace/integrations-openai-ai-server/image";
 import { tryAcquire } from "../limiter";
 import { logger } from "../../logger";
@@ -19,7 +19,6 @@ function chatCommand(
   name: string,
   aliases: string[] | undefined,
   label: string,
-  model: string,
 ): Command {
   return {
     name,
@@ -44,8 +43,8 @@ function chatCommand(
       }
       try {
         await ctx.react("🤖");
-        const completion = await openrouter.chat.completions.create({
-          model,
+        const completion = await gemini.chat.completions.create({
+          model: GEMINI_MODEL,
           max_tokens: 8192,
           messages: [
             { role: "system", content: systemPrompt(ctx.config.botName) },
@@ -56,7 +55,7 @@ function chatCommand(
         if (!answer) throw new Error("empty AI response");
         await ctx.reply(answer);
       } catch (err) {
-        logger.warn({ err, model }, "AI chat failed");
+        logger.warn({ err, model: GEMINI_MODEL }, "AI chat failed");
         await ctx.reply("❌ The AI couldn't answer right now. Please try again in a moment.");
       } finally {
         slot.release();
@@ -107,12 +106,12 @@ function imageCommand(name: string, aliases: string[] | undefined): Command {
 }
 
 export const aiCommands: Command[] = [
-  chatCommand("gpt", ["gpt4", "chatgpt"], "ChatGPT", "openai/gpt-4o-mini"),
-  chatCommand("gemini", ["bard"], "Gemini", "google/gemini-3.5-flash"),
-  chatCommand("claude", undefined, "Claude", "anthropic/claude-haiku-4.5"),
-  chatCommand("deepseek", undefined, "DeepSeek", "deepseek/deepseek-chat"),
-  chatCommand("blackbox", undefined, "Blackbox AI", "deepseek/deepseek-chat"),
-  chatCommand("llama", undefined, "Llama", "meta-llama/llama-3.3-70b-instruct"),
-  chatCommand("ai", undefined, "the AI", "openai/gpt-4o-mini"),
+  chatCommand("gpt", ["gpt4", "chatgpt"], "ChatGPT"),
+  chatCommand("gemini", ["bard"], "Gemini"),
+  chatCommand("claude", undefined, "Claude"),
+  chatCommand("deepseek", undefined, "DeepSeek"),
+  chatCommand("blackbox", undefined, "Blackbox AI"),
+  chatCommand("llama", undefined, "Llama"),
+  chatCommand("ai", undefined, "the AI"),
   imageCommand("imagine", ["dalle", "aiimg"]),
 ];

@@ -19,6 +19,9 @@
       "path": "../../lib/integrations-openrouter-ai"
     },
     {
+      "path": "../../lib/integrations-gemini"
+    },
+    {
       "path": "../../lib/integrations-openai-ai-server"
     }
   ]

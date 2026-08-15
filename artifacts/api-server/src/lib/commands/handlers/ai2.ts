@@ -1,7 +1,7 @@
 import { downloadMediaMessage } from "@whiskeysockets/baileys";
 import sharp from "sharp";
 import type { Command, CommandContext } from "../types";
-import { openrouter } from "@workspace/integrations-openrouter-ai";
+import { gemini, GEMINI_MODEL } from "@workspace/integrations-gemini";
 import { speechToText } from "@workspace/integrations-openai-ai-server/audio";
 import { generateImageBuffer } from "@workspace/integrations-openai-ai-server/image";
 import { tryAcquire } from "../limiter";
@@ -59,8 +59,8 @@ function chatWith(promptName: string, label: string): Command {
       try {
         await ctx.react("🤖");
         const sys = SYSTEM[promptName as keyof typeof SYSTEM];
-        const completion = await openrouter.chat.completions.create({
-          model: "openai/gpt-4o-mini",
+        const completion = await gemini.chat.completions.create({
+          model: GEMINI_MODEL,
           max_tokens: 2048,
           messages: [
             { role: "system", content: sys ?? SYSTEM.base },
@@ -118,8 +118,8 @@ export const ai2Commands: Command[] = [
       if (!slot.ok) return ctx.reply(slot.reason);
       try {
         await ctx.react("🈯");
-        const completion = await openrouter.chat.completions.create({
-          model: "openai/gpt-4o-mini",
+        const completion = await gemini.chat.completions.create({
+          model: GEMINI_MODEL,
           max_tokens: 2048,
           messages: [{ role: "system", content: `Translate the user text into ${lang}. Reply with ONLY the translation.` }, { role: "user", content: prompt }],
         });
@@ -143,8 +143,8 @@ export const ai2Commands: Command[] = [
       if (!slot.ok) return ctx.reply(slot.reason);
       try {
         await ctx.react("🧠");
-        const completion = await openrouter.chat.completions.create({
-          model: "openai/gpt-4o-mini",
+        const completion = await gemini.chat.completions.create({
+          model: GEMINI_MODEL,
           max_tokens: 2048,
           messages: [
             { role: "system", content: SYSTEM.base },
@@ -188,8 +188,8 @@ export const ai2Commands: Command[] = [
         if (!buf) return ctx.reply("❌ Couldn't read the image.");
         const base64 = buf.toString("base64");
         const prompt = ctx.text.trim() || "Describe this image in detail.";
-        const completion = await openrouter.chat.completions.create({
-          model: "openai/gpt-4o-mini",
+        const completion = await gemini.chat.completions.create({
+          model: GEMINI_MODEL,
           max_tokens: 1500,
           messages: [
             { role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } }] },
@@ -269,8 +269,8 @@ export const ai2Commands: Command[] = [
         const buf = (await downloadMediaMessage(ctx.msg, "buffer", {}, { logger, reuploadRequest: ctx.sock.updateMediaMessage })) as Buffer;
         const text = await speechToText(buf);
         if (!text?.trim()) return ctx.reply("❌ Couldn't hear audio.");
-        const completion = await openrouter.chat.completions.create({
-          model: "openai/gpt-4o-mini",
+        const completion = await gemini.chat.completions.create({
+          model: GEMINI_MODEL,
           max_tokens: 1500,
           messages: [{ role: "system", content: "Translate the user's message to English. Reply with the translation only." }, { role: "user", content: text }],
         });
@@ -299,8 +299,8 @@ export const ai2Commands: Command[] = [
         const buf = (await downloadMediaMessage(ctx.msg, "buffer", {}, { logger, reuploadRequest: ctx.sock.updateMediaMessage })) as Buffer;
         const text = await speechToText(buf);
         if (!text?.trim()) return ctx.reply("❌ Couldn't hear audio.");
-        const completion = await openrouter.chat.completions.create({
-          model: "openai/gpt-4o-mini",
+        const completion = await gemini.chat.completions.create({
+          model: GEMINI_MODEL,
           max_tokens: 1500,
           messages: [{ role: "system", content: "Summarize the user's message into a few clear bullet points." }, { role: "user", content: text }],
         });
@@ -332,8 +332,8 @@ export const ai2Commands: Command[] = [
         const pdfText = await extractPdfText(buf);
         const question = ctx.text.trim() || "Summarize this PDF";
         if (!pdfText.trim()) return ctx.reply("❌ Couldn't read the PDF (it may be scanned images).");
-        const completion = await openrouter.chat.completions.create({
-          model: "openai/gpt-4o-mini",
+        const completion = await gemini.chat.completions.create({
+          model: GEMINI_MODEL,
           max_tokens: 1500,
           messages: [{ role: "system", content: "Answer the user's question using ONLY the provided PDF text." }, { role: "user", content: `PDF TEXT:\n${pdfText.slice(0, 12000)}\n\nQUESTION: ${question}` }],
         });
@@ -364,8 +364,8 @@ export const ai2Commands: Command[] = [
         const buf = (await downloadMediaMessage(ctx.msg, "buffer", {}, { logger, reuploadRequest: ctx.sock.updateMediaMessage })) as Buffer;
         const pdfText = await extractPdfText(buf);
         if (!pdfText.trim()) return ctx.reply("❌ Couldn't read the PDF (it may be scanned images).");
-        const completion = await openrouter.chat.completions.create({
-          model: "openai/gpt-4o-mini",
+        const completion = await gemini.chat.completions.create({
+          model: GEMINI_MODEL,
           max_tokens: 1500,
           messages: [{ role: "system", content: "Summarize the provided PDF text into clear bullet points." }, { role: "user", content: pdfText.slice(0, 12000) }],
         });
@@ -390,8 +390,8 @@ export const ai2Commands: Command[] = [
       if (!slot.ok) return ctx.reply(slot.reason);
       try {
         await ctx.react("🔎");
-        const completion = await openrouter.chat.completions.create({
-          model: "openai/gpt-4o-mini",
+        const completion = await gemini.chat.completions.create({
+          model: GEMINI_MODEL,
           max_tokens: 2048,
           messages: [{ role: "system", content: `${SYSTEM.base} Answer as if responding to a web search; be accurate and cite sources only if you're sure.` }, { role: "user", content: prompt }],
         });
