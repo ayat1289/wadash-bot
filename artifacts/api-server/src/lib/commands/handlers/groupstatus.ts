@@ -1,6 +1,7 @@
 import type { Command } from "../types";
 import { setConfig, getConfig } from "../../config";
-import { getGroupMetadataCached } from "../../group-meta";
+import { getGroupMetadataCached, jidBase } from "../../group-meta";
+import { logger } from "../../logger";
 
 function toggle(name: string, aliases: string[] | undefined, label: string, keyPrefix: string): Command {
   return {
@@ -27,6 +28,22 @@ async function chunk<T>(arr: T[], size: number): Promise<T[][]> {
   return out;
 }
 
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error("USync query timed out")), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
+
 export const groupStatusCommands: Command[] = [
   {
     name: "gst",
@@ -41,16 +58,22 @@ export const groupStatusCommands: Command[] = [
       const jids = meta.participants.map((p) => p.id).filter(Boolean);
       if (!jids.length) return ctx.reply("❌ No participants found in this group.");
 
+      // Status entries are keyed by the bare number because Baileys 7 may echo
+      // the result under the phone JID even when we queried with a LID (and vice
+      // versa). Normalizing both sides makes the lookup LID/phone agnostic.
       const statusMap = new Map<string, string | null>();
       const batches = await chunk(jids, 40);
       for (const batch of batches) {
         try {
-          const res = (await ctx.sock.fetchStatus(...batch)) as StatusEntry[] | undefined;
+          const res = (await withTimeout(ctx.sock.fetchStatus(...batch), 8000)) as
+            | StatusEntry[]
+            | undefined;
           for (const entry of res ?? []) {
-            statusMap.set(entry.id, entry.status?.status ?? null);
+            const key = jidBase(entry.id);
+            if (key) statusMap.set(key, entry.status?.status ?? null);
           }
-        } catch {
-          /* one batch may fail; keep the rest */
+        } catch (err) {
+          logger.warn({ err, batch: batch.length }, "Group status batch failed");
         }
         await new Promise((r) => setTimeout(r, 300));
       }
@@ -62,8 +85,8 @@ export const groupStatusCommands: Command[] = [
         `│`,
       ];
       for (const p of meta.participants) {
-        const num = (p.id ?? "").split(":")[0].split("@")[0];
-        const status = statusMap.get(p.id);
+        const num = jidBase(p.id);
+        const status = statusMap.get(num);
         const name =
           p.notify ??
           (num === botNum ? ctx.config.botName : undefined) ??
