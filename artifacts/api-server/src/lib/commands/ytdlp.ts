@@ -22,15 +22,27 @@ export interface YtDownload {
 }
 
 /**
- * Force the YouTube `android_vr` player client. YouTube rejects yt-dlp's default
- * web clients from datacenter IPs; `android_vr` works for search, m4a audio
- * (format 140) and mp4 video. NOTE: opus/webm streams (e.g. format 251) return
- * HTTP 403 from this host, so audio MUST prefer `[ext=m4a]` (see the format
- * selectors in handlers/download.ts / downloads2.ts). The arg is namespaced to
- * youtube, so it's a harmless no-op for other extractors (soundcloud, tiktok,
- * instagram, etc.).
+ * YouTube player clients. `mweb` is the primary client — it provides direct
+ * HTTPS stream URLs that work reliably from datacenter IPs (unlike `web` which
+ * forces SABR-only, or `android_vr` which intermittently 403s). `android_vr`
+ * is the fallback for metadata/search on other extractors. With deno + mweb,
+ * format 18 (combined mp4) works for all tested YouTube videos.
  */
-const YT_EXTRACTOR_ARGS = ["--extractor-args", "youtube:player_client=android_vr"];
+const YT_EXTRACTOR_ARGS = [
+  "--extractor-args",
+  "youtube:player_client=mweb,android_vr",
+];
+
+/**
+ * Tell yt-dlp to use deno for YouTube's JS challenges (n-parameter, signature).
+ * deno is installed at /.deno/bin/deno; the self-contained yt-dlp binary has no
+ * built-in JS runtime, so without this flag the `web` client falls back to
+ * android_vr-only mode and loses DASH formats.
+ */
+const DENO_PATH = "/.deno/bin/deno";
+const DENO_ARGS = existsSync(DENO_PATH)
+  ? ["--js-runtimes", "deno"]
+  : [];
 
 /**
  * Network-resilience flags applied to every yt-dlp invocation. SoundCloud (the
@@ -108,23 +120,49 @@ function getRunner(): YtRunner {
  */
 export async function fetchMeta(target: string): Promise<YtMeta> {
   const r = getRunner();
-  const { code, stdout, stderr } = await runProcess(
-    r.cmd,
-    [...r.baseArgs, "-j", "--no-warnings", "--no-playlist", ...NET_ARGS, ...YT_EXTRACTOR_ARGS, "--", target],
-    { timeoutMs: 90_000 },
-  );
-  if (code !== 0 || !stdout.trim()) {
-    throw new Error(`yt-dlp metadata failed (${code}): ${stderr.slice(-200)}`);
+  const args = [
+    ...r.baseArgs,
+    ...DENO_ARGS,
+    "-j",
+    "--no-warnings",
+    "--no-playlist",
+    ...NET_ARGS,
+    ...YT_EXTRACTOR_ARGS,
+    "--",
+    target,
+  ];
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { code, stdout, stderr } = await runProcess(r.cmd, args, {
+        timeoutMs: 90_000,
+      });
+      if (code !== 0 || !stdout.trim()) {
+        throw new Error(
+          `yt-dlp metadata failed (${code}): ${stderr.slice(-200)}`,
+        );
+      }
+      const firstLine = stdout.trim().split("\n")[0] ?? "{}";
+      const j = JSON.parse(firstLine) as Record<string, unknown>;
+      return {
+        title: typeof j.title === "string" ? j.title : "media",
+        duration: typeof j.duration === "number" ? j.duration : null,
+        uploader: typeof j.uploader === "string" ? j.uploader : null,
+        ext: typeof j.ext === "string" ? j.ext : null,
+        webpageUrl: typeof j.webpage_url === "string" ? j.webpage_url : null,
+      };
+    } catch (err) {
+      lastErr = err;
+      if (attempt < 2) {
+        logger.warn(
+          { err, target, attempt },
+          "yt-dlp metadata failed, retrying",
+        );
+        await new Promise((r) => setTimeout(r, 2500 + attempt * 1500));
+      }
+    }
   }
-  const firstLine = stdout.trim().split("\n")[0] ?? "{}";
-  const j = JSON.parse(firstLine) as Record<string, unknown>;
-  return {
-    title: typeof j.title === "string" ? j.title : "media",
-    duration: typeof j.duration === "number" ? j.duration : null,
-    uploader: typeof j.uploader === "string" ? j.uploader : null,
-    ext: typeof j.ext === "string" ? j.ext : null,
-    webpageUrl: typeof j.webpage_url === "string" ? j.webpage_url : null,
-  };
+  throw lastErr;
 }
 
 /**
@@ -141,6 +179,7 @@ export async function download(
   try {
     const args = [
       ...r.baseArgs,
+      ...DENO_ARGS,
       "-o",
       join(dir, "media.%(ext)s"),
       "--no-warnings",
@@ -165,10 +204,14 @@ export async function download(
     }
     args.push("--", target);
 
-    // YouTube intermittently 403s datacenter IPs; one retry absorbs transient
-    // blocks (most resolve on the second attempt).
+    // YouTube intermittently 403s datacenter IPs on stream URLs. The block is
+    // transient — retrying after a short delay (3–5 s) almost always succeeds.
+    // We try up to 4 times with progressive backoff to absorb these bursts.
+    const MAX_ATTEMPTS = 4;
+    const isRetryable = (err: unknown) =>
+      err instanceof Error && /403|Forbidden|timed?\s*out/i.test(err.message);
     let lastErr: unknown = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       try {
         const { code, stderr } = await runProcess(r.cmd, args, { timeoutMs: 180_000 });
         const files = await readdir(dir);
@@ -192,9 +235,16 @@ export async function download(
         return { buffer, ext };
       } catch (err) {
         lastErr = err;
-        if (attempt === 0) {
-          logger.warn({ err, target, attempt: 0 }, "yt-dlp download failed, retrying");
-          await new Promise((r) => setTimeout(r, 1200));
+        const retryable = isRetryable(err);
+        if (attempt < MAX_ATTEMPTS - 1 && retryable) {
+          const delayMs = 3000 + attempt * 1500;
+          logger.warn(
+            { err, target, attempt, delayMs },
+            "yt-dlp download retryable failure, retrying",
+          );
+          await new Promise((r) => setTimeout(r, delayMs));
+        } else if (!retryable) {
+          break;
         }
       }
     }

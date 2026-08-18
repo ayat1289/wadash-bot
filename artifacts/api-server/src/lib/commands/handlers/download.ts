@@ -11,7 +11,7 @@ import {
   clearPendingDownload,
 } from "../pending-downloads";
 
-const AUDIO_FORMAT = "bestaudio[ext=m4a]/bestaudio[ext=mp4]/18/best";
+const AUDIO_FORMAT = "18/bestaudio[ext=m4a]/best";
 const VIDEO_FORMAT =
   "best[ext=mp4][height<=720]/best[height<=720]/best[ext=mp4]/best";
 const MAX_AUDIO_MB = 50;
