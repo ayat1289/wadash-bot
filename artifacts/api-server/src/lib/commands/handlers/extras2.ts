@@ -41,8 +41,6 @@ const confessions = new Map<string, { from: string; text: string }>();
 const confessionMode = new Set<string>(); // `${tenant}:${group}`
 const songQuiz = new Map<string, { answer: string; tries: number }>();
 const attendance = new Map<string, Set<string>>(); // `${tenant}:${group}:${date}`
-const joinQueue = new Map<string, string[]>();
-const joinQuestions = new Map<string, string>(); // `${tenant}:${group}` -> q
 const votes = new Map<string, { topic: string; yes: Set<string>; no: Set<string> }>();
 
 export const blacklist = new Set<string>(); // `${tenant}:${number}`
@@ -501,6 +499,11 @@ export const extras2Commands: Command[] = [
   },
 
   // --- Join queue / verify -------------------------------------------------------
+  //
+  // These operate on WhatsApp's REAL join-approval queue (group join-approval
+  // mode). `groupRequestParticipantsList` lists the pending requests, and
+  // `groupRequestParticipantsUpdate` approves/rejects them. The bot must be a
+  // group admin for these to work.
   {
     name: "joinqueue",
     category: "ADMIN",
@@ -508,9 +511,20 @@ export const extras2Commands: Command[] = [
     adminOnly: true,
     groupOnly: true,
     handler: async (ctx) => {
-      const q = joinQueue.get(`${ctx.tenantId}:${ctx.from}`);
-      if (!q?.length) return ctx.reply("📭 No pending join requests.");
-      await ctx.reply(`⏳ *Pending joins:*\n\n${q.join("\n")}\n\nApprove: *${ctx.prefix}approve <num>*`);
+      let reqs: { [key: string]: string }[] = [];
+      try {
+        reqs = (await ctx.sock.groupRequestParticipantsList(ctx.from)) ?? [];
+      } catch (err) {
+        return ctx.reply(`❌ Couldn't fetch join requests: ${(err as Error)?.message ?? err}`);
+      }
+      if (!reqs.length) return ctx.reply("📭 No pending join requests.");
+      const lines = reqs.map((r, i) => {
+        const jid = r.jid ?? r.lid ?? "";
+        return `${i + 1}. ${jid.split(":")[0].split("@")[0]}`;
+      });
+      await ctx.reply(
+        `⏳ *Pending joins:*\n\n${lines.join("\n")}\n\nApprove: *${ctx.prefix}approve <num>*  Reject: *${ctx.prefix}reject <num>*`,
+      );
     },
   },
   {
@@ -521,10 +535,27 @@ export const extras2Commands: Command[] = [
     groupOnly: true,
     handler: async (ctx) => {
       const num = ctx.text.trim().replace(/\D/g, "");
-      const q = joinQueue.get(`${ctx.tenantId}:${ctx.from}`);
-      if (!num || !q?.includes(num)) return ctx.reply("❌ Not in the pending queue.");
-      joinQueue.set(`${ctx.tenantId}:${ctx.from}`, q.filter((x) => x !== num));
-      await ctx.reply(`✅ Approved ${num}. They can rejoin now.`);
+      if (!num) return ctx.reply(`Usage: *${ctx.prefix}approve <number>`);
+      let reqs: { [key: string]: string }[] = [];
+      try {
+        reqs = (await ctx.sock.groupRequestParticipantsList(ctx.from)) ?? [];
+      } catch (err) {
+        return ctx.reply(`❌ Couldn't fetch join requests: ${(err as Error)?.message ?? err}`);
+      }
+      const base = num.includes("@") ? num : `${num}@s.whatsapp.net`;
+      const match = reqs.find((r) => {
+        const jid = r.jid ?? r.lid ?? "";
+        const rBase = jid.split(":")[0].split("@")[0];
+        return jid === base || rBase === num;
+      });
+      if (!match) return ctx.reply("❌ No pending request for that number.");
+      const jid = match.jid ?? match.lid ?? "";
+      try {
+        await ctx.sock.groupRequestParticipantsUpdate(ctx.from, [jid], "approve");
+      } catch (err) {
+        return ctx.reply(`❌ Approve failed: ${(err as Error)?.message ?? err}`);
+      }
+      await ctx.reply(`✅ Approved *${num}*.`);
     },
   },
   {
@@ -535,10 +566,27 @@ export const extras2Commands: Command[] = [
     groupOnly: true,
     handler: async (ctx) => {
       const num = ctx.text.trim().replace(/\D/g, "");
-      const q = joinQueue.get(`${ctx.tenantId}:${ctx.from}`);
-      if (!num || !q?.includes(num)) return ctx.reply("❌ Not in the pending queue.");
-      joinQueue.set(`${ctx.tenantId}:${ctx.from}`, q.filter((x) => x !== num));
-      await ctx.reply(`❌ Rejected ${num}.`);
+      if (!num) return ctx.reply(`Usage: *${ctx.prefix}reject <number>`);
+      let reqs: { [key: string]: string }[] = [];
+      try {
+        reqs = (await ctx.sock.groupRequestParticipantsList(ctx.from)) ?? [];
+      } catch (err) {
+        return ctx.reply(`❌ Couldn't fetch join requests: ${(err as Error)?.message ?? err}`);
+      }
+      const base = num.includes("@") ? num : `${num}@s.whatsapp.net`;
+      const match = reqs.find((r) => {
+        const jid = r.jid ?? r.lid ?? "";
+        const rBase = jid.split(":")[0].split("@")[0];
+        return jid === base || rBase === num;
+      });
+      if (!match) return ctx.reply("❌ No pending request for that number.");
+      const jid = match.jid ?? match.lid ?? "";
+      try {
+        await ctx.sock.groupRequestParticipantsUpdate(ctx.from, [jid], "reject");
+      } catch (err) {
+        return ctx.reply(`❌ Reject failed: ${(err as Error)?.message ?? err}`);
+      }
+      await ctx.reply(`❌ Rejected *${num}*.`);
     },
   },
 ];
