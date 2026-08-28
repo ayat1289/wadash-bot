@@ -106,6 +106,11 @@ type Session = {
   // Bounded store of recent messages so anti-delete can restore revoked ones.
   recentMessages: Map<string, WAMessage>;
   spamTracker: Map<string, number[]>;
+  // Anti-link warning counter: `${groupId}:${senderBase}` -> warnings issued.
+  // A member is warned (and their link message deleted) up to 2 times; the 3rd
+  // time they are kicked immediately. In-memory and per-tenant (like the spam
+  // tracker) — reset on bot restart.
+  antilinkWarnings: Map<string, number>;
   presenceInterval: ReturnType<typeof setInterval> | null;
   reconnectTimer: ReturnType<typeof setTimeout> | null;
   reconnectAttempts: number;
@@ -138,6 +143,7 @@ function getOrCreateSession(tenantId: number): Session {
       authDir: authDirFor(tenantId),
       recentMessages: new Map(),
       spamTracker: new Map(),
+      antilinkWarnings: new Map(),
       presenceInterval: null,
       reconnectTimer: null,
       reconnectAttempts: 0,
@@ -798,16 +804,20 @@ const LINK_REGEX =
   /(?:https?:\/\/|www\.)[^\s<>]+|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s<>]*)?/i;
 
 /**
- * Anti-link: ANY link posted in a group is removed immediately and the sender
- * is kicked — regardless of the `.antilink` toggle and with no warning. This
- * covers WhatsApp invites, Facebook, TikTok, Instagram, YouTube and every other
- * URL. The bot's own account, the configured owner, and group admins are
- * exempt (the owner may post from their own account — possibly as an `@lid`
- * identity — without it being a `fromMe` message, so the match must be
- * LID/phone-aware). The bot can only act when it is itself a group admin.
+ * Anti-link: when a member posts ANY link (WhatsApp invite, Facebook, TikTok,
+ * Instagram, YouTube, every URL) in a group, the bot deletes the message and
+ * gives them a warning — for the 1st and 2nd offence. On the 3rd offence the
+ * bot kicks them immediately. This runs regardless of the `.antilink` toggle.
+ * The bot's own account, the configured owner, and group admins are exempt (the
+ * owner may post from their own account — possibly as an `@lid` identity —
+ * without it being a `fromMe` message, so the match must be LID/phone-aware).
+ * The bot can only act when it is itself a group admin.
  *
- * Returns true when it removed the message + sender (caller should stop
- * processing the message).
+ * Warning counters are tracked per group+user (in-memory, per tenant) and are
+ * enforced once the bot has reached the kick threshold.
+ *
+ * Returns true when it removed the message (+ sender on the 3rd strike): the
+ * caller should stop processing the message.
  */
 async function enforceAntiLink(session: Session, groupJid: string, msg: WAMessage, body: string): Promise<boolean> {
   try {
@@ -838,12 +848,43 @@ async function enforceAntiLink(session: Session, groupJid: string, msg: WAMessag
       return false;
     }
 
+    // First delete the offending link message.
     await session.socket.sendMessage(groupJid, { delete: msg.key });
+
+    // Bump the warning counter for this user in this group.
+    const key = `${groupJid}:${senderBase}`;
+    const strike = (session.antilinkWarnings.get(key) ?? 0) + 1;
+    session.antilinkWarnings.set(key, strike);
+
+    if (strike < 3) {
+      // 1st / 2nd offence: warn but don't kick.
+      await session.socket.sendMessage(groupJid, {
+        text:
+          `⚠️ @${senderBase}, group links are not allowed here.\n` +
+          `*Warning ${strike}/3*. ${
+            strike === 1 ? "Next time you'll get a 2nd warning." : "One more and you'll be removed."
+          }`,
+        mentions: [sender],
+      });
+      await db.insert(activityLogTable).values({
+        tenantId: session.tenantId,
+        type: "message",
+        description: `Anti-link deleted a link from ${senderBase} (warning ${strike}/3)`,
+      });
+      return true;
+    }
+
+    // 3rd offence: kick immediately.
     await session.socket.groupParticipantsUpdate(groupJid, [sender], "remove");
+    await session.socket.sendMessage(groupJid, {
+      text: `🚫 @${senderBase} removed for posting links after 3 warnings.`,
+      mentions: [sender],
+    });
+    session.antilinkWarnings.delete(key);
     await db.insert(activityLogTable).values({
       tenantId: session.tenantId,
       type: "message",
-      description: `Anti-link removed a link from ${senderBase} and kicked them`,
+      description: `Anti-link removed ${senderBase} after 3 warnings`,
     });
     return true;
   } catch (err) {

@@ -1,7 +1,7 @@
 import type { WASocket } from "@whiskeysockets/baileys";
 import type { Command, CommandContext, WAMessage } from "../types";
-import { fetchMeta, download } from "../ytdlp";
-import { fetchJson, fetchText, fetchBuffer } from "../http-utils";
+import { fetchMeta, fetchInfo, download } from "../ytdlp";
+import { fetchJson, fetchText, fetchBuffer, fetchImageBuffer } from "../http-utils";
 import { isPublicHttpUrl, hostMatches } from "../url-utils";
 import { tryAcquire } from "../limiter";
 import { logger } from "../../logger";
@@ -140,6 +140,84 @@ async function sendVideo(s: Sendable, target: string): Promise<void> {
     { quoted: s.msg },
   );
   await s.react("✅");
+}
+
+/**
+ * Scrape the original full-resolution image URL (`i.pinimg.com/originals/...`)
+ * directly out of a pin's public HTML. Pinterest's yt-dlp extractor only handles
+ * video pins, so image-only pins are fetched this way instead. Only ever reads a
+ * pinterest.com page (its output is restricted to pinimg.com hosts below).
+ */
+async function scrapePinterestImage(pinUrl: string): Promise<string | null> {
+  const html = await fetchText(pinUrl, 15000);
+  const originals =
+    html.match(/https:\/\/i\.pinimg\.com\/originals\/[a-z0-9]+\/[a-z0-9]+\/[a-z0-9]+\/[a-z0-9]+\.(?:jpg|jpeg|png|webp)/i)?.[0] ??
+    html.match(/https:\/\/i\.pinimg\.com\/[0-9]+x\/[^"'\\\s]+\.(?:jpg|jpeg|png|webp)/i)?.[0];
+  return originals ?? null;
+}
+
+/**
+ * Pinterest handler: a pin is either a video (yt-dlp extractor returns formats)
+ * or an image (no formats / extractor 404s). For videos we download the MP4 via
+ * yt-dlp. For images we pull the full-resolution original from the pin metadata
+ * (or scrape it from the page HTML when the extractor doesn't surface it).
+ */
+async function sendPinterest(ctx: CommandContext, target: string): Promise<void> {
+  await ctx.react("⏳");
+  // Normalize a pin.it short link to the canonical pinterest.co/m pin URL so the
+  // HTML scrape (if needed) hits the right page.
+  const pinUrl = hostMatches(target, ["pin.it"]) ? null : target;
+  let title = "";
+  let imgUrl: string | null = null;
+
+  try {
+    const info = await fetchInfo(target);
+    title = typeof info.title === "string" && info.title ? info.title : "";
+    const formats = Array.isArray(info.formats) ? info.formats : [];
+    const hasVideo = formats.length > 0 || typeof info.url === "string";
+    if (hasVideo) {
+      await sendVideo(ctx, target);
+      return;
+    }
+    // Image pin from metadata: pick the highest-resolution candidate.
+    // `thumbnail` is usually the full-size original (i.pinimg.com/originals/...).
+    if (typeof info.thumbnail === "string") imgUrl = info.thumbnail;
+    if ((!imgUrl || !hostMatches(imgUrl, ["pinimg.com"])) && Array.isArray(info.thumbnails)) {
+      const best = info.thumbnails
+        .filter((t) => typeof t?.url === "string")
+        .sort((a, b) => (Number(b?.width ?? 0) * Number(b?.height ?? 0)) - (Number(a?.width ?? 0) * Number(a?.height ?? 0)))[0];
+      if (best && hostMatches(best.url, ["pinimg.com"])) imgUrl = best.url;
+    }
+  } catch {
+    // Extractor failed (e.g. a 404 on image-only pins): fall through to the HTML
+    // scrape below instead of failing outright.
+  }
+
+  // If metadata didn't yield a usable image (extractor 404 on image pins), scrape
+  // the page HTML for the original image URL.
+  if (!imgUrl || !hostMatches(imgUrl, ["pinimg.com"])) {
+    try {
+      imgUrl = await scrapePinterestImage(pinUrl ?? target);
+    } catch {
+      imgUrl = null;
+    }
+  }
+
+  if (!imgUrl || !hostMatches(imgUrl, ["pinimg.com"])) {
+    await ctx.reply("❌ Couldn't find a downloadable image or video for that pin.");
+    return;
+  }
+  const buffer = await fetchImageBuffer(imgUrl, {
+    isAllowed: (u) => hostMatches(u, ["pinimg.com"]),
+    maxBytes: 16 * 1024 * 1024,
+    maxRedirects: 3,
+  });
+  await ctx.sock.sendMessage(
+    ctx.from,
+    { image: buffer, caption: title ? `🖼️ ${title}` : "🖼️ Pinterest" },
+    { quoted: ctx.msg },
+  );
+  await ctx.react("✅");
 }
 
 /**
@@ -522,7 +600,19 @@ export const downloadCommands: Command[] = [
   platformVideo("instagram", ["ig", "igvideo"], "Download an Instagram video", "Instagram", ["instagram.com"]),
   platformVideo("facebook", ["fb", "fbvideo"], "Download a Facebook video", "Facebook", ["facebook.com", "fb.watch", "fb.com"]),
   platformVideo("twitter", ["x", "xvideo"], "Download a Twitter/X video", "Twitter/X", ["twitter.com", "x.com"]),
-  platformVideo("pinterest", undefined, "Download a Pinterest video", "Pinterest", ["pinterest.com", "pin.it"]),
+  dl({
+    name: "pinterest",
+    category: "DOWNLOAD",
+    desc: "Download a Pinterest photo or video",
+    usage: "Usage: *%ppinterest <Pinterest link>*",
+    run: async (ctx, input) => {
+      if (!hostMatches(input, ["pinterest.com", "pin.it"])) {
+        await ctx.reply("❌ Please provide a valid Pinterest link.");
+        return;
+      }
+      await sendPinterest(ctx, input);
+    },
+  }),
   // --- Special sources ---
   dl({
     name: "spotify",

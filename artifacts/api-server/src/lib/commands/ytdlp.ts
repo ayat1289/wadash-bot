@@ -119,11 +119,31 @@ function getRunner(): YtRunner {
  * without downloading the media. Throws if the target can't be resolved.
  */
 export async function fetchMeta(target: string): Promise<YtMeta> {
+  const j = await fetchInfo(target);
+  return {
+    title: typeof j.title === "string" ? j.title : "media",
+    duration: typeof j.duration === "number" ? j.duration : null,
+    uploader: typeof j.uploader === "string" ? j.uploader : null,
+    ext: typeof j.ext === "string" ? j.ext : null,
+    webpageUrl: typeof j.webpage_url === "string" ? j.webpage_url : null,
+  };
+}
+
+/**
+ * Fetch the FULL parsed yt-dlp info JSON for a target (all fields — formats,
+ * thumbnails, id, etc.) without downloading the media. Used by handlers that
+ * need to inspect what a page actually contains (e.g. Pinterest, which may be
+ * a video pin with formats or an image-only pin with just a thumbnail).
+ * Throws if the target can't be resolved.
+ */
+export async function fetchInfo(
+  target: string,
+): Promise<Record<string, any>> {
   const r = getRunner();
   const args = [
     ...r.baseArgs,
     ...DENO_ARGS,
-    "-j",
+    "-J",
     "--no-warnings",
     "--no-playlist",
     ...NET_ARGS,
@@ -144,13 +164,7 @@ export async function fetchMeta(target: string): Promise<YtMeta> {
       }
       const firstLine = stdout.trim().split("\n")[0] ?? "{}";
       const j = JSON.parse(firstLine) as Record<string, unknown>;
-      return {
-        title: typeof j.title === "string" ? j.title : "media",
-        duration: typeof j.duration === "number" ? j.duration : null,
-        uploader: typeof j.uploader === "string" ? j.uploader : null,
-        ext: typeof j.ext === "string" ? j.ext : null,
-        webpageUrl: typeof j.webpage_url === "string" ? j.webpage_url : null,
-      };
+      return j as Record<string, any>;
     } catch (err) {
       lastErr = err;
       if (attempt < 2) {
