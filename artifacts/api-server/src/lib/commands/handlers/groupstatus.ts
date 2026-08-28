@@ -1,6 +1,11 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Command } from "../types";
 import { setConfig } from "../../config";
 import { logger } from "../../logger";
+import { getFfmpegPath } from "../ffmpeg";
+import { runProcess } from "../proc";
 import {
   downloadMediaMessage,
   generateWAMessageContent,
@@ -8,6 +13,40 @@ import {
   type proto,
   type WAMessage,
 } from "@whiskeysockets/baileys";
+
+const DURATION_RE = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/;
+
+/**
+ * WhatsApp silently drops *video* group-status updates that carry no valid
+ * duration (`seconds`). Baileys' `generateWAMessageContent` builds a
+ * `videoMessage` with a thumbnail + dimensions but never fills in the length,
+ * so re-uploaded videos resolve fine on the wire yet never appear in the
+ * group. Probe the downloaded buffer with the vendored ffmpeg and return its
+ * duration in seconds (0 when it cannot be read).
+ */
+async function videoDurationSeconds(media: Buffer): Promise<number> {
+  const dir = await mkdtemp(join(tmpdir(), "gst-video-"));
+  try {
+    const src = join(dir, "in.bin");
+    await writeFile(src, media);
+    const { code, stderr } = await runProcess(getFfmpegPath(), ["-hide_banner", "-i", src, "-f", "null", "-"], {
+      timeoutMs: 60_000,
+      maxStdoutBytes: 1024,
+    });
+    if (code !== 0) return 0;
+    const match = DURATION_RE.exec(stderr);
+    if (!match) return 0;
+    const h = Number(match[1]);
+    const m = Number(match[2]);
+    const s = Number(match[3]);
+    return Math.max(0, Math.round(h * 3600 + m * 60 + s));
+  } catch (error) {
+    logger.warn({ err: error }, "gst: failed to probe video duration");
+    return 0;
+  } finally {
+    rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
 
 function toggle(name: string, aliases: string[] | undefined, label: string, keyPrefix: string): Command {
   return {
@@ -109,6 +148,13 @@ export const groupStatusCommands: Command[] = [
             const innerObj = inner[innerKey] as Record<string, unknown>;
             const existingCtx = (innerObj.contextInfo ?? {}) as Record<string, unknown>;
             innerObj.contextInfo = { ...existingCtx, isGroupStatus: true };
+
+            if (kind === "video" && innerObj.videoMessage) {
+              const vm = innerObj.videoMessage as Record<string, unknown>;
+              vm.gifPlayback = false;
+              if (!vm.mimetype) vm.mimetype = "video/mp4";
+              if (!vm.seconds) vm.seconds = await videoDurationSeconds(media as Buffer);
+            }
           }
 
           const wrapped = { groupStatusMessageV2: { message: inner } };
