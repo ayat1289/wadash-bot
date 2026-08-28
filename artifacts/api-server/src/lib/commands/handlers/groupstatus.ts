@@ -149,21 +149,23 @@ export const groupStatusCommands: Command[] = [
             const existingCtx = (innerObj.contextInfo ?? {}) as Record<string, unknown>;
             innerObj.contextInfo = { ...existingCtx, isGroupStatus: true };
 
-            if (kind === "video" && innerObj.videoMessage) {
-              const vm = innerObj.videoMessage as Record<string, unknown>;
-              vm.gifPlayback = false;
-              if (!vm.mimetype) vm.mimetype = "video/mp4";
-              if (!vm.seconds) vm.seconds = await videoDurationSeconds(media as Buffer);
+            // For a video the inner content IS the videoMessage itself
+            // (`inner["videoMessage"]`), so set its duration/mimetype directly —
+            // WhatsApp silently drops video statuses with no valid `seconds`.
+            if (kind === "video") {
+              innerObj.gifPlayback = false;
+              if (!innerObj.mimetype) innerObj.mimetype = "video/mp4";
+              if (!innerObj.seconds) innerObj.seconds = await videoDurationSeconds(media as Buffer);
               logger.info(
                 {
                   group: gid,
                   sizeBytes: (media as Buffer)?.length,
-                  seconds: vm.seconds,
-                  mimetype: vm.mimetype,
-                  hasThumbnail: Boolean(vm.jpegThumbnail),
-                  width: vm.width,
-                  height: vm.height,
-                  directPath: Boolean(vm.directPath),
+                  seconds: innerObj.seconds,
+                  mimetype: innerObj.mimetype,
+                  hasThumbnail: Boolean(innerObj.jpegThumbnail),
+                  width: innerObj.width,
+                  height: innerObj.height,
+                  directPath: Boolean(innerObj.directPath),
                 },
                 "gst: video status prepared",
               );
