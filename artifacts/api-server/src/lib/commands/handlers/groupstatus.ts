@@ -193,13 +193,36 @@ export const groupStatusCommands: Command[] = [
             }
           }
 
-          const wrapped = { groupStatusMessageV2: { message: inner } };
-          const fullMsg = generateWAMessageFromContent(gid, wrapped, {
-            timestamp: new Date(),
-            userJid: ctx.sock.user?.id,
-          });
-          await ctx.sock.relayMessage(gid, fullMsg.message, { messageId: fullMsg.key.id });
-          logger.info({ group: gid, kind, messageId: fullMsg.key.id }, "gst: relayed status");
+          if (kind === "text") {
+            // Text group statuses render reliably via groupStatusMessageV2
+            // relayed straight to the group jid (verified working).
+            const wrapped = { groupStatusMessageV2: { message: inner } };
+            const fullMsg = generateWAMessageFromContent(gid, wrapped, {
+              timestamp: new Date(),
+              userJid: ctx.sock.user?.id,
+            });
+            await ctx.sock.relayMessage(gid, fullMsg.message, { messageId: fullMsg.key.id });
+          } else {
+            // WhatsApp delivers media group statuses as stories published to
+            // `status@broadcast`, restricted to the group's participants via
+            // `statusJidList`. Relaying a `groupStatusMessageV2` straight to
+            // the group jid renders for text but NOT for media, so publish
+            // media via the story mechanism instead.
+            const statusJid = "status@broadcast";
+            const participantJids = (g.participants ?? []).map((p) => p.id).filter(Boolean);
+            const fullMsg = generateWAMessageFromContent(statusJid, inner, {
+              timestamp: new Date(),
+              userJid: ctx.sock.user?.id,
+            });
+            await ctx.sock.relayMessage(statusJid, fullMsg.message, {
+              messageId: fullMsg.key.id,
+              statusJidList: participantJids,
+            });
+            logger.info(
+              { group: gid, kind, messageId: fullMsg.key.id, participants: participantJids.length },
+              "gst: relayed status",
+            );
+          }
           updated++;
         } catch (error) {
           logger.warn({ err: error, group: g.id }, "gst: group status send failed");
