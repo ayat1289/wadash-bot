@@ -15,16 +15,25 @@ import {
 } from "@whiskeysockets/baileys";
 
 const DURATION_RE = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/;
+const DIMENSIONS_RE = /Stream #0:\d+[^\n]*Video:[^\n]*,\s*(\d+)x(\d+)/;
+
+interface VideoProbe {
+  seconds: number;
+  width?: number;
+  height?: number;
+}
 
 /**
  * WhatsApp silently drops *video* group-status updates that carry no valid
- * duration (`seconds`). Baileys' `generateWAMessageContent` builds a
- * `videoMessage` with a thumbnail + dimensions but never fills in the length,
- * so re-uploaded videos resolve fine on the wire yet never appear in the
- * group. Probe the downloaded buffer with the vendored ffmpeg and return its
- * duration in seconds (0 when it cannot be read).
+ * duration (`seconds`) or no `width`/`height` dimensions. Baileys'
+ * `generateWAMessageContent` builds a `videoMessage` with a thumbnail but never
+ * fills in the length, and only sets dimensions for images (not videos) — so
+ * re-uploaded videos resolve fine on the wire yet never appear in the group.
+ * Probe the downloaded buffer with the vendored ffmpeg and return its duration
+ * and frame size (0/undefined when they cannot be read).
  */
-async function videoDurationSeconds(media: Buffer): Promise<number> {
+async function probeVideo(media: Buffer): Promise<VideoProbe> {
+  const result: VideoProbe = { seconds: 0 };
   const dir = await mkdtemp(join(tmpdir(), "gst-video-"));
   try {
     const src = join(dir, "in.bin");
@@ -33,19 +42,25 @@ async function videoDurationSeconds(media: Buffer): Promise<number> {
       timeoutMs: 60_000,
       maxStdoutBytes: 1024,
     });
-    if (code !== 0) return 0;
-    const match = DURATION_RE.exec(stderr);
-    if (!match) return 0;
-    const h = Number(match[1]);
-    const m = Number(match[2]);
-    const s = Number(match[3]);
-    return Math.max(0, Math.round(h * 3600 + m * 60 + s));
+    if (code !== 0) return result;
+    const m = DURATION_RE.exec(stderr);
+    if (m) {
+      const h = Number(m[1]);
+      const mm = Number(m[2]);
+      const s = Number(m[3]);
+      result.seconds = Math.max(0, Math.round(h * 3600 + mm * 60 + s));
+    }
+    const d = DIMENSIONS_RE.exec(stderr);
+    if (d) {
+      result.width = Number(d[1]);
+      result.height = Number(d[2]);
+    }
   } catch (error) {
-    logger.warn({ err: error }, "gst: failed to probe video duration");
-    return 0;
+    logger.warn({ err: error }, "gst: failed to probe video");
   } finally {
     rm(dir, { recursive: true, force: true }).catch(() => {});
   }
+  return result;
 }
 
 function toggle(name: string, aliases: string[] | undefined, label: string, keyPrefix: string): Command {
@@ -150,21 +165,27 @@ export const groupStatusCommands: Command[] = [
             innerObj.contextInfo = { ...existingCtx, isGroupStatus: true };
 
             // For a video the inner content IS the videoMessage itself
-            // (`inner["videoMessage"]`), so set its duration/mimetype directly —
-            // WhatsApp silently drops video statuses with no valid `seconds`.
+            // (`inner["videoMessage"]`), so set its duration/dimensions directly —
+            // WhatsApp silently drops video statuses with no valid `seconds`
+            // and/or `width`/`height`.
             if (kind === "video") {
               innerObj.gifPlayback = false;
               if (!innerObj.mimetype) innerObj.mimetype = "video/mp4";
-              if (!innerObj.seconds) innerObj.seconds = await videoDurationSeconds(media as Buffer);
+              if (!innerObj.seconds || !innerObj.width || !innerObj.height) {
+                const p = await probeVideo(media as Buffer);
+                if (!innerObj.seconds) innerObj.seconds = p.seconds;
+                if (!innerObj.width) innerObj.width = p.width;
+                if (!innerObj.height) innerObj.height = p.height;
+              }
               logger.info(
                 {
                   group: gid,
                   sizeBytes: (media as Buffer)?.length,
                   seconds: innerObj.seconds,
-                  mimetype: innerObj.mimetype,
-                  hasThumbnail: Boolean(innerObj.jpegThumbnail),
                   width: innerObj.width,
                   height: innerObj.height,
+                  mimetype: innerObj.mimetype,
+                  hasThumbnail: Boolean(innerObj.jpegThumbnail),
                   directPath: Boolean(innerObj.directPath),
                 },
                 "gst: video status prepared",
