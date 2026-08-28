@@ -14,6 +14,12 @@ import {
 const AUDIO_FORMAT = "18/bestaudio[ext=m4a]/best";
 const VIDEO_FORMAT =
   "best[ext=mp4][height<=720]/best[height<=720]/best[ext=mp4]/best";
+// Pinterest-specific: prefer a single self-contained format (so a merge isn't
+// needed). Merging audio+video HLS on Pinterest fails with "Requested format is
+// not available", so we fall back to the best video-only stream (silent) rather
+// than erroring. Progressive pins still carry audio.
+const PINTEREST_VIDEO_FORMAT =
+  "best[acodec!=none][vcodec!=none][height<=720]/bestv[height<=720][vcodec!=none]/best[height<=720]/bestv";
 const MAX_AUDIO_MB = 50;
 const MAX_VIDEO_MB = 64;
 const MAX_DURATION_S = 1800; // 30 minutes
@@ -143,6 +149,29 @@ async function sendVideo(s: Sendable, target: string): Promise<void> {
 }
 
 /**
+ * Pinterest video: use a single self-contained format (PINTEREST_VIDEO_FORMAT)
+ * because yt-dlp's default audio+video HLS merge fails on Pinterest with
+ * "Requested format is not available". Progressive pins keep audio; HLS-only
+ * pins download a (silent) video stream rather than erroring.
+ */
+async function sendPinterestVideo(s: Sendable, target: string, title?: string): Promise<void> {
+  await s.react("⏳");
+  const meta = title
+    ? { title }
+    : await fetchMeta(target).catch(() => ({ title: "Pinterest" as string }));
+  const { buffer } = await download(target, {
+    format: PINTEREST_VIDEO_FORMAT,
+    maxSizeMb: MAX_VIDEO_MB,
+  });
+  await s.sock.sendMessage(
+    s.from,
+    { video: buffer, mimetype: "video/mp4", caption: `🎬 ${meta.title}` },
+    { quoted: s.msg },
+  );
+  await s.react("✅");
+}
+
+/**
  * Scrape the original full-resolution image URL (`i.pinimg.com/originals/...`)
  * directly out of a pin's public HTML. Pinterest's yt-dlp extractor only handles
  * video pins, so image-only pins are fetched this way instead. Only ever reads a
@@ -176,7 +205,7 @@ async function sendPinterest(ctx: CommandContext, target: string): Promise<void>
     const formats = Array.isArray(info.formats) ? info.formats : [];
     const hasVideo = formats.length > 0 || typeof info.url === "string";
     if (hasVideo) {
-      await sendVideo(ctx, target);
+      await sendPinterestVideo(ctx, target, title || undefined);
       return;
     }
     // Image pin from metadata: pick the highest-resolution candidate.

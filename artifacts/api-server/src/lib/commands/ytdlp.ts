@@ -203,17 +203,18 @@ export async function download(
       ...YT_EXTRACTOR_ARGS,
       "--max-filesize",
       `${opts.maxSizeMb}M`,
+      // Point yt-dlp's postprocessor (audio extraction) AND any format merging
+      // (e.g. HLS video+audio) at the vendored static ffmpeg. Without this it
+      // resolves ffmpeg from PATH (the Nix-store binary), which is corrupted in
+      // the published image and dies with `spawn EIO`; and HLS video sources
+      // that need audio+video merged simply fail with "Requested format is not
+      // available". `--ffmpeg-location` accepts the binary path directly.
+      "--ffmpeg-location",
+      getFfmpegPath(),
       "-f",
       opts.format,
     ];
     if (opts.audio) {
-      // Point yt-dlp's audio-extraction postprocessor at the vendored static
-      // ffmpeg. Without this it resolves ffmpeg from PATH (the Nix-store binary),
-      // which is corrupted in the published image and dies with `spawn EIO` —
-      // yt-dlp then ships the raw SoundCloud container and WhatsApp rejects it as
-      // "something is wrong with the audio file". `--ffmpeg-location` accepts the
-      // binary path directly.
-      args.push("--ffmpeg-location", getFfmpegPath());
       args.push("-x", "--audio-format", "mp3", "--audio-quality", "5");
     }
     args.push("--", target);
