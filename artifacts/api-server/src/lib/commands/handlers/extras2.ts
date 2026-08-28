@@ -9,7 +9,7 @@ import { downloadMediaMessage } from "@whiskeysockets/baileys";
 import type { Command, CommandContext } from "../types";
 import { db, activityLogTable, tenantsTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
-import { download, fetchMeta } from "../ytdlp";
+import { download, fetchMeta, downloadInstagramViaApi } from "../ytdlp";
 import { runProcess } from "../proc";
 import { getFfmpegPath } from "../ffmpeg";
 import { logger } from "../../logger";
@@ -66,9 +66,21 @@ function today(ctx: CommandContext): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+const IS_INSTAGRAM_URL = /^https?:\/\/(www\.)?(instagram\.com|instagr\.am|ig\.me)\//i;
+
 async function sendMedia(ctx: CommandContext, url: string, asVideo: boolean): Promise<void> {
   await ctx.react("⏳");
+  const isInstagram = IS_INSTAGRAM_URL.test(url);
   try {
+    // Instagram media: the bot's IP is blanket-blocked by Instagram (429 on
+    // every surface), so use the hosted SenatorAPI fallback first (clean
+    // infrastructure + media CDN), then fall back to local yt-dlp.
+    if (isInstagram) {
+      const dl = await downloadInstagramViaApi(url, { maxSizeMb: MAX_VIDEO_MB });
+      await ctx.sock.sendMessage(ctx.from, { video: dl.buffer, mimetype: "video/mp4", caption: `🎬 ${dl.title ?? url}` }, { quoted: ctx.msg });
+      await ctx.react("✅");
+      return;
+    }
     const meta = await fetchMeta(url);
     const { buffer, ext } = await download(url, {
       format: VIDEO_FORMAT,
@@ -81,7 +93,7 @@ async function sendMedia(ctx: CommandContext, url: string, asVideo: boolean): Pr
     }
     await ctx.react("✅");
   } catch (err) {
-    logger.warn({ err, url }, "extras2 download failed");
+    logger.warn({ err, url, isInstagram }, "extras2 download failed");
     await ctx.react("❌");
     await ctx.reply("❌ Couldn't download that. Link may be private or unsupported.");
   }

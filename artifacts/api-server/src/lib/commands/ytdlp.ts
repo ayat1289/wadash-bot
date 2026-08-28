@@ -19,6 +19,89 @@ export interface YtMeta {
 export interface YtDownload {
   buffer: Buffer;
   ext: string;
+  /** Optional display title (e.g. supplied by the Instagram download API). */
+  title?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Instagram download API fallback.
+//
+// The bot's server IP is blanket-blocked by Instagram (HTTP 429 on EVERY
+// surface — www, oembed, __a=1 JSON and the mobile i.instagram.com API), so the
+// local yt-dlp extractor cannot resolve Instagram media at all. We bypass that
+// by asking the hosted SenatorAPI web service (api.fast-creat.ir/instagram) to
+// resolve the link from clean infrastructure, then download the resulting
+// media CDN URL (instagram.*.fbcdn.net) — which is NOT blocked from our IP.
+//
+// Auth: the apikey is the full "<bot_id>:<secret>@Api_ManagerRoBot" token.
+// The URL MUST be passed clean (no ?igsh=... query params) or the service
+// replies "لینک وارد شده صحیح نمی باشد" (link not correct). The service is
+// anti-spam rate-limited, so transient failures are retried.
+// ---------------------------------------------------------------------------
+
+const IG_API_KEY = process.env.INSTAGRAM_API_KEY ?? "";
+
+export async function downloadInstagramViaApi(
+  url: string,
+  opts: { maxSizeMb: number },
+): Promise<YtDownload> {
+  if (!IG_API_KEY) {
+    throw new Error("Instagram download API key not configured (INSTAGRAM_API_KEY)");
+  }
+  // Strip any query params / tracking suffix — the service rejects them.
+  const clean = url.split("?")[0].split("#")[0];
+  const endpoint = new URL("https://api.fast-creat.ir/instagram");
+  endpoint.searchParams.set("apikey", IG_API_KEY);
+  endpoint.searchParams.set("type", "post2");
+  endpoint.searchParams.set("url", clean);
+
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(endpoint.toString(), {
+        headers: { "User-Agent": "Mozilla/5.0" },
+        signal: AbortSignal.timeout(45_000),
+      });
+      const text = await res.text();
+      let j: any;
+      try {
+        j = JSON.parse(text);
+      } catch {
+        throw new Error(`Instagram API returned non-JSON: ${text.slice(0, 200)}`);
+      }
+      if (!j?.ok || !j?.result?.ok) {
+        const status = j?.result?.status ?? "unknown error";
+        throw new Error(`Instagram API failed: ${status}`);
+      }
+      const files: any[] = Array.isArray(j.result.files) ? j.result.files : [];
+      const video = files.find((f) => f?.type === "video" && f?.url);
+      if (!video?.url) {
+        throw new Error("Instagram API returned no video download URL");
+      }
+      const title = typeof j.result.title === "string" ? j.result.title : null;
+
+      // Stream the CDN mp4 into a buffer, enforcing a ceiling.
+      const vr = await fetch(video.url, {
+        headers: { "User-Agent": "Mozilla/5.0 (Linux; Android 10)", Accept: "*/*" },
+        signal: AbortSignal.timeout(90_000),
+      });
+      if (!vr.ok) throw new Error(`Media download failed (${vr.status})`);
+      const contentLength = Number(vr.headers.get("content-length") ?? 0);
+      const capBytes = opts.maxSizeMb * 1024 * 1024 * 1.2;
+      if (contentLength && contentLength > capBytes) {
+        throw new Error("file exceeds size limit");
+      }
+      const buffer = Buffer.from(await vr.arrayBuffer());
+      if (buffer.length > capBytes) throw new Error("file exceeds size limit");
+      const ext = video.ext === "mp4" ? "mp4" : "mp4";
+      return { buffer, ext, title };
+    } catch (err) {
+      lastErr = err;
+      logger.warn({ err, url, attempt }, "Instagram API download failed, retrying");
+      await new Promise((r) => setTimeout(r, 2500 + attempt * 2000));
+    }
+  }
+  throw lastErr;
 }
 
 /**
