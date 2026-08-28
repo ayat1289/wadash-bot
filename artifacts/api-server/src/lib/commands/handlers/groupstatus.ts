@@ -154,6 +154,19 @@ export const groupStatusCommands: Command[] = [
               vm.gifPlayback = false;
               if (!vm.mimetype) vm.mimetype = "video/mp4";
               if (!vm.seconds) vm.seconds = await videoDurationSeconds(media as Buffer);
+              logger.info(
+                {
+                  group: gid,
+                  sizeBytes: (media as Buffer)?.length,
+                  seconds: vm.seconds,
+                  mimetype: vm.mimetype,
+                  hasThumbnail: Boolean(vm.jpegThumbnail),
+                  width: vm.width,
+                  height: vm.height,
+                  directPath: Boolean(vm.directPath),
+                },
+                "gst: video status prepared",
+              );
             }
           }
 
@@ -163,6 +176,7 @@ export const groupStatusCommands: Command[] = [
             userJid: ctx.sock.user?.id,
           });
           await ctx.sock.relayMessage(gid, fullMsg.message, { messageId: fullMsg.key.id });
+          logger.info({ group: gid, kind, messageId: fullMsg.key.id }, "gst: relayed status");
           updated++;
         } catch (error) {
           logger.warn({ err: error, group: g.id }, "gst: group status send failed");
