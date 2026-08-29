@@ -1611,6 +1611,42 @@ function wireSocketEvents(
     }
   });
 
+  // Message edits: someone editing a message to sneak a link (or bad word)
+  // past the initial moderation gets the same treatment as a fresh message —
+  // immediately deleted and warned. Baileys emits edits as `messages.update`
+  // where `update.update.message.editedMessage.message` holds the NEW content.
+  sock.ev.on("messages.update", async (updates) => {
+    if (!isLive()) return;
+    for (const upd of updates) {
+      // Ignore non-edit updates (receipts, revokes, status, etc.).
+      const edited = upd.update?.message?.editedMessage?.message;
+      if (!edited || !upd.key) continue;
+
+      const fromJid = upd.key.remoteJid ?? "";
+      if (!fromJid.endsWith("@g.us")) continue; // groups only
+      if (upd.key.fromMe || upd.key.participant === session.socket?.user?.id) continue;
+
+      const body =
+        edited.conversation ??
+        edited.extendedTextMessage?.text ??
+        edited.imageMessage?.caption ??
+        edited.videoMessage?.caption ??
+        "";
+      if (!body) continue;
+
+      // Reuse the same enforcement used for fresh messages — if a link is
+      // detected the edited message is deleted + warned (or kicked on 3rd).
+      const msg = { key: upd.key, message: edited } as WAMessage;
+      try {
+        const removedLink = await enforceAntiLink(session, fromJid, msg, body);
+        if (removedLink) continue;
+        await enforceAntiBadword(session, fromJid, msg, body);
+      } catch (err) {
+        logger.warn({ err, groupJid: fromJid, tenantId: session.tenantId }, "Anti-link edit enforcement failed");
+      }
+    }
+  });
+
   sock.ev.on("contacts.update", async (updates) => {
     if (!isLive()) return;
     for (const contact of updates) {
