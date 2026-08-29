@@ -805,9 +805,9 @@ const LINK_REGEX =
 
 /**
  * Anti-link: when a member posts ANY link (WhatsApp invite, Facebook, TikTok,
- * Instagram, YouTube, every URL) in a group, the bot deletes the message and
- * gives them a warning — for the 1st and 2nd offence. On the 3rd offence the
- * bot kicks them immediately. This runs regardless of the `.antilink` toggle.
+ * Instagram, YouTube, every URL) in a group and anti-link is turned ON for that
+ * group (`.antilink on`), the bot deletes the message and gives them a warning —
+ * for the 1st and 2nd offence. On the 3rd offence the bot kicks them immediately.
  * The bot's own account, the configured owner, and group admins are exempt (the
  * owner may post from their own account — possibly as an `@lid` identity —
  * without it being a `fromMe` message, so the match must be LID/phone-aware).
@@ -822,6 +822,10 @@ const LINK_REGEX =
 async function enforceAntiLink(session: Session, groupJid: string, msg: WAMessage, body: string): Promise<boolean> {
   try {
     if (!LINK_REGEX.test(body) || !session.socket) return false;
+    // Honor the per-group `.antilink` toggle — without this the on/off command
+    // writes a config value that is never read, so toggling has no effect.
+    const enabled = await getBool(`antilink:${groupJid}`, session.tenantId);
+    if (!enabled) return false;
 
     const meta = await getGroupMetadataCached(session.socket, session.tenantId, groupJid);
     if (!meta) return false;
