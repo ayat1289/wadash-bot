@@ -1,0 +1,42 @@
+name: Deploy wadash bot to VPS
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: wadash-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          port: ${{ secrets.VPS_PORT && secrets.VPS_PORT || '22' }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cat > /opt/wadash-bot/docker/.env <<'EOF'
+            POSTGRES_USER=wadash
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            POSTGRES_DB=wadash
+            DATABASE_URL=postgresql://wadash:${{ secrets.POSTGRES_PASSWORD }}@db:5432/wadash
+            TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+            TELEGRAM_FORCE_JOIN_CHAT=${{ secrets.TELEGRAM_FORCE_JOIN_CHAT }}
+            AI_INTEGRATIONS_OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+            AI_INTEGRATIONS_OPENROUTER_API_KEY=${{ secrets.AI_INTEGRATIONS_OPENROUTER_API_KEY }}
+            AI_INTEGRATIONS_OPENAI_BASE_URL=https://api.openai.com/v1
+            AI_INTEGRATIONS_OPENAI_API_KEY=${{ secrets.AI_INTEGRATIONS_OPENAI_API_KEY }}
+            AI_INTEGRATIONS_GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+            AI_INTEGRATIONS_GEMINI_API_KEY=${{ secrets.AI_INTEGRATIONS_GEMINI_API_KEY }}
+            CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }}
+            CLERK_PUBLISHABLE_KEY=${{ secrets.CLERK_PUBLISHABLE_KEY }}
+            LOG_LEVEL=info
+            EOF
+            bash /opt/wadash-bot/scripts/deploy-remote.sh

@@ -51,6 +51,9 @@ Thumbs.db
 # Python venv created by package tooling
 .pythonlibs/
 
+# VPS production secrets (written by the deploy workflow)
+/docker/.env
+
 # WhatsApp auth/session state — runtime secrets (committed by explicit request for backup)
 
 

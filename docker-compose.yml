@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - ./docker/.env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wadash -d wadash"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  api:
+    build:
+      context: .
+    restart: unless-stopped
+    env_file:
+      - ./docker/.env
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      TELEGRAM_POLLING: "1"
+    ports:
+      - "8080:8080"
+    volumes:
+      - wadata:/app/artifacts/api-server/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  wadata:
