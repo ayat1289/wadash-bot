@@ -42,9 +42,10 @@ ENV PORT=8080
 RUN corepack enable && corepack prepare pnpm@10 --activate
 
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
-COPY --from=builder /app/artifacts/api-server/bin ./artifacts/api-server/bin
-COPY --from=builder /app/artifacts/api-server/data ./artifacts/api-server/data
+# Full workspace trees: pnpm keeps externalized deps (baileys, sharp, protobufjs,
+# ...) in per-package node_modules inside these dirs, and the bundle resolves
+# them relative to the api-server dir at runtime.
+COPY --from=builder /app/artifacts ./artifacts
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
