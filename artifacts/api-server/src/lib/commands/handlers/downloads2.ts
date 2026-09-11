@@ -31,7 +31,7 @@ const ALLOWED = [
   "mediafire.com", "onedrive.live.com", "drive.google.com",
 ];
 
-const SOUNDCLOUD_SEARCH = "ytsearch1";
+const SOUNDCLOUD_SEARCH = "scsearch1";
 
 function isUrl(s: string): boolean {
   return /^https?:\/\//i.test(s.trim());
@@ -148,7 +148,7 @@ async function audioCmd(ctx: CommandContext): Promise<void> {
       await ctx.reply("❌ Couldn't download that link. It may be private, region-locked, or unavailable.");
     } else {
       await ctx.reply(
-        "❌ Couldn't find that song on YouTube. Check the spelling, or send a direct link.",
+        "❌ Couldn't find that track. Check the spelling, or send a direct link.",
       );
     }
   }

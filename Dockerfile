@@ -30,9 +30,10 @@ RUN pnpm --filter @workspace/api-server build
 FROM node:24-slim AS runtime
 WORKDIR /app
 
-# ffmpeg for audio/media commands (bin/ffmpeg is a symlink to /usr/bin/ffmpeg)
+# ffmpeg for audio/media commands (bin/ffmpeg is a symlink to /usr/bin/ffmpeg),
+# python3 for the committed yt-dlp zipapp (bin/yt-dlp is a python zipapp, not an ELF)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates ffmpeg \
+    && apt-get install -y --no-install-recommends ca-certificates ffmpeg python3 \
     && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production

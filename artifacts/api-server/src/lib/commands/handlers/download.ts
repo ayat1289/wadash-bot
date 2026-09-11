@@ -251,9 +251,9 @@ async function sendPinterest(ctx: CommandContext, target: string): Promise<void>
 
 /**
  * Resolve a user argument to a yt-dlp target: a vetted public URL or a search.
- * Non-URL input resolves through a YouTube search (`ytsearch1`), which works
- * from this server for both metadata and m4a audio. The `android_vr` client
- * gets formats, and audio prefers m4a because opus/webm streams 403.
+ * Non-URL input resolves through the passed search prefix — audio commands use
+ * SoundCloud (`scsearch1`); video commands keep `ytsearch1` (a name search still
+ * fails on YouTube from this host, but the caller's error message explains it).
  */
 async function fromUrlOrSearch(
   ctx: CommandContext,
@@ -276,9 +276,9 @@ async function fromUrlOrSearch(
 
 /**
  * Interactive `.play` / `.song`: resolve the track, show it, and ask the user to
- * reply `1` (audio/mp3) or `2` (video/mp4). The download itself happens when they
- * answer — see `handleDownloadSelection`, wired into the message loop. Search by
- * name uses YouTube (`ytsearch1`), so both audio and video work.
+ * reply `1` (audio/mp3). The download itself happens when they answer — see
+ * `handleDownloadSelection`, wired into the message loop. Name search uses
+ * SoundCloud (`scsearch1`) because YouTube blocks this server's IP entirely.
  */
 async function startPlay(ctx: CommandContext, input: string): Promise<void> {
   const url = isUrl(input);
@@ -289,7 +289,7 @@ async function startPlay(ctx: CommandContext, input: string): Promise<void> {
     return;
   }
   await ctx.react("🔎");
-  const target = url ? input : `ytsearch1:${input}`;
+  const target = url ? input : `scsearch1:${input}`;
   try {
     const meta = await fetchMeta(target);
     if (meta.duration && meta.duration > MAX_DURATION_S) {
@@ -302,7 +302,7 @@ async function startPlay(ctx: CommandContext, input: string): Promise<void> {
       meta.webpageUrl && hostMatches(meta.webpageUrl, MEDIA_DOMAINS)
         ? meta.webpageUrl
         : target;
-    const videoTarget = url ? input : `ytsearch1:${input}`;
+    const videoTarget = url ? input : `scsearch1:${input}`;
     setPendingDownload(ctx.tenantId, ctx.from, ctx.sender, {
       audioTarget,
       videoTarget,
@@ -315,12 +315,12 @@ async function startPlay(ctx: CommandContext, input: string): Promise<void> {
     if (meta.uploader) lines.push(`👤 ${meta.uploader}`);
     if (meta.duration) lines.push(`⏱️ ${fmtDuration(meta.duration)}`);
     if (link) lines.push(`🔗 ${link}`);
-    lines.push("", "_Reply to download:_", "*1* — 🎵 Audio (mp3)", "*2* — 🎬 Video (mp4)");
+    lines.push("", "_Reply to download:_", "*1* — 🎵 Audio (mp3)");
     await ctx.reply(lines.join("\n"));
   } catch (err) {
     logger.warn({ err, cmd: "play", input }, "play search failed");
     await ctx.reply(
-      "❌ Couldn't find that song on YouTube. Check the spelling, or send a direct YouTube link and pick *1* for audio.",
+      "❌ Couldn't find that song. Check the spelling, or send a direct SoundCloud / TikTok / Instagram link. (YouTube blocks downloads from this server.)",
     );
   }
 }
@@ -497,7 +497,7 @@ async function spotifyHandler(ctx: CommandContext, input: string): Promise<void>
     await ctx.reply("❌ Couldn't read that Spotify track.");
     return;
   }
-  const searchTarget = `ytsearch1:${title}`;
+  const searchTarget = `scsearch1:${title}`;
   const meta = await fetchMeta(searchTarget);
   if (meta.duration && meta.duration > MAX_DURATION_S) {
     await ctx.reply(`❌ That track is too long (${fmtDuration(meta.duration)}).`);
@@ -607,7 +607,7 @@ export const downloadCommands: Command[] = [
     category: "DOWNLOAD",
     desc: "Download audio (MP3) from a search or link",
     usage: "Usage: *%pytmp3 <song name or link>*",
-    run: (ctx, input) => fromUrlOrSearch(ctx, input, sendAudio, "ytsearch1"),
+    run: (ctx, input) => fromUrlOrSearch(ctx, input, sendAudio, "scsearch1"),
   }),
   // --- Video (also listed under the VIDEO menu) ---
   dl({
