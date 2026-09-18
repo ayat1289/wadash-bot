@@ -1,6 +1,6 @@
 import type { WASocket } from "@whiskeysockets/baileys";
 import type { Command, CommandContext, WAMessage } from "../types";
-import { fetchMeta, fetchInfo, download } from "../ytdlp";
+import { fetchMeta, fetchInfo, download, downloadVideoSmart } from "../ytdlp";
 import { fetchJson, fetchText, fetchBuffer, fetchImageBuffer } from "../http-utils";
 import { isPublicHttpUrl, hostMatches } from "../url-utils";
 import { tryAcquire } from "../limiter";
@@ -23,8 +23,6 @@ const AUDIO_SEARCH_PREFIX: "ytsearch1" | "scsearch1" = process.env.YOUTUBE_COOKI
 const VIDEO_SEARCH_OK = Boolean(
   process.env.YOUTUBE_COOKIES || process.env.YOUTUBE_COOKIES_FILE,
 );
-const VIDEO_FORMAT =
-  "best[ext=mp4][height<=720]/best[height<=720]/best[ext=mp4]/best";
 // Pinterest-specific: prefer a single self-contained format (so a merge isn't
 // needed). Merging audio+video HLS on Pinterest fails with "Requested format is
 // not available", so we fall back to the best video-only stream (silent) rather
@@ -144,16 +142,17 @@ async function sendAudio(
   await s.react("✅");
 }
 
+/**
+ * Send a video for a URL or search target. TikTok/Instagram links are routed
+ * through their working API paths (tikwm / SenatorAPI) by `downloadVideoSmart`;
+ * everything else goes through yt-dlp.
+ */
 async function sendVideo(s: Sendable, target: string): Promise<void> {
   await s.react("⏳");
-  const meta = await fetchMeta(target);
-  const { buffer } = await download(target, {
-    format: VIDEO_FORMAT,
-    maxSizeMb: MAX_VIDEO_MB,
-  });
+  const dl = await downloadVideoSmart(target, { maxSizeMb: MAX_VIDEO_MB });
   await s.sock.sendMessage(
     s.from,
-    { video: buffer, mimetype: "video/mp4", caption: `🎬 ${meta.title}` },
+    { video: dl.buffer, mimetype: "video/mp4", caption: `🎬 ${dl.title ?? "video"}` },
     { quoted: s.msg },
   );
   await s.react("✅");
@@ -658,8 +657,9 @@ export const downloadCommands: Command[] = [
     run: (ctx, input) => fromUrlOrSearch(ctx, input, sendVideo),
   }),
   // --- Platform-specific video (host-allowlisted) ---
-  platformVideo("tiktok", ["tt", "tiktokvideo"], "Download a TikTok video", "TikTok", ["tiktok.com"]),
-  platformVideo("instagram", ["ig", "igvideo"], "Download an Instagram video", "Instagram", ["instagram.com"]),
+  // (TikTok → `.tiktok`/`.tt` and Instagram → `.ig`/`.reels` live in
+  // downloads2.ts / extras2.ts — their yt-dlp paths are IP-blocked, so they use
+  // the tikwm API / SenatorAPI instead. Facebook/X/Pinterest still use yt-dlp.)
   platformVideo("facebook", ["fb", "fbvideo"], "Download a Facebook video", "Facebook", ["facebook.com", "fb.watch", "fb.com"]),
   platformVideo("twitter", ["x", "xvideo"], "Download a Twitter/X video", "Twitter/X", ["twitter.com", "x.com"]),
   dl({

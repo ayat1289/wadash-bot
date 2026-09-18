@@ -5,6 +5,37 @@ description: Why audio downloads use SoundCloud (not YouTube) and why yt-dlp is 
 
 # yt-dlp audio source + vendored binary
 
+## TikTok & Instagram (as of 2026): use API dispatch, NOT yt-dlp
+
+Both TikTok and Instagram are IP-blocked from this host for yt-dlp — TikTok's
+extractor answers "Your IP address is blocked from accessing this post" and
+Instagram's returns an EMPTY media response. So `commands/ytdlp.ts` ships two
+smart dispatchers used by ALL video senders (`.video`, `.ytmp4`, `.ttslide`,
+`.tiktok`/`.tt`/`.ttmp3`, `.ig`/`.reels`/`.igvideo`):
+
+- `downloadTikTok(url, {audio, maxSizeMb})` — the public **tikwm** API
+  (`https://www.tikwm.com/api/?url=...`) resolves posts from clean infra and the
+  returned `*.tiktokcdn*.com` media files ARE fetchable from this host's DC IP
+  (verified live: 58.5MB mp4, HTTP 200). It sends a browser UA + `Referer:
+  https://www.tiktok.com/`, caps the size (~1.2× budget), falls back to the
+  watermarked copy, and picks the audio mimetype from the source extension
+  (`audio/mpeg` for mp3, else `audio/mp4`).
+- `downloadVideoSmart(url, {maxSizeMb})` — dispatches: TikTok → tikwm; Instagram
+  → hosted SenatorAPI (`downloadInstagramViaApi`) WHEN `INSTAGRAM_API_KEY` is set
+  in `docker/.env`, otherwise falls through to yt-dlp (blocked → callers reply
+  with the "get a free key from @Api_ManagerRoBot" message); everything else
+  (YouTube/Facebook/X/Pinterest origins) → yt-dlp with format best[mp4]≤720.
+
+**KEY ROUTING INSIGHT:** command aliases must NOT blur these boundaries —
+`commands.set()` last-registration-wins in `registry.ts` (import order in
+`index.ts`: download → downloads2 → extras2). TikTok video now lives ONLY in the
+`tiktokhd` entry (aliases `tt`/`tiktok`/`tik`/`tiktokvideo`); the old
+`platformVideo("tiktok"|"instagram")` yt-dlp entries in `handlers/download.ts`
+were REMOVED. Instagram lives ONLY in extras2 `reels` (aliases
+`story`/`ig`/`instagram`/`igvideo`). If someone re-adds a `.tiktokvideo`/
+`.igvideo` handler elsewhere that talks directly to yt-dlp, it will silently
+break again.
+
 Audio commands (`.play`/`.song`/`.ytmp3`) download from **SoundCloud**, not
 YouTube. Search uses the `scsearch1:<query>` prefix (in `handlers/download.ts`).
 Video commands (`.ytmp4`/`.video`) with a **typed name** are short-circuited in

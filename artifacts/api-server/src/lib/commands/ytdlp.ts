@@ -104,6 +104,110 @@ export async function downloadInstagramViaApi(
   throw lastErr;
 }
 
+/** True when the hosted Instagram download API is configured (INSTAGRAM_API_KEY). */
+export function isInstagramApiConfigured(): boolean {
+  return Boolean(IG_API_KEY);
+}
+
+export const IS_TIKTOK_URL =
+  /^https?:\/\/(www\.)?(tiktok\.com|vm\.tiktok\.com|vt\.tiktok\.com)\//i;
+export const IS_INSTAGRAM_URL =
+  /^https?:\/\/(www\.)?(instagram\.com|instagr\.am|ig\.me)\//i;
+
+const VIDEO_FORMAT =
+  "best[ext=mp4][height<=720]/best[height<=720]/best[ext=mp4]/best";
+
+/**
+ * TikTok video/audio download. yt-dlp's TikTok extractor is IP-blocked from this
+ * host ("Your IP address is blocked from accessing this post"), but the public
+ * tikwm API resolves posts from clean infrastructure and the returned
+ * `*.tiktokcdn*.com` media files ARE fetchable from this host. Resolve via
+ * tikwm, then stream the CDN URL.
+ */
+export async function downloadTikTok(
+  url: string,
+  opts: { audio?: boolean; maxSizeMb: number },
+): Promise<{
+  buffer: Buffer;
+  ext: string;
+  title: string | null;
+  nickname: string | null;
+  mime: string;
+}> {
+  const res = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`, {
+    headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) throw new Error(`TikTok API HTTP ${res.status}`);
+  const j = (await res.json()) as {
+    code?: number;
+    msg?: string;
+    data?: { title?: string; nickname?: string; play?: string; wmplay?: string; music?: string };
+  };
+  const src = opts.audio ? j.data?.music : j.data?.play || j.data?.wmplay;
+  if (j.code !== 0 || !src) {
+    throw new Error(`TikTok API returned no media: ${j.msg ?? `code ${j.code}`}`);
+  }
+  const capBytes = opts.maxSizeMb * 1024 * 1024 * 1.2;
+  const media = await fetch(src, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+      Referer: "https://www.tiktok.com/",
+    },
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!media.ok) throw new Error(`TikTok CDN HTTP ${media.status}`);
+  const length = Number(media.headers.get("content-length") ?? 0);
+  if (length && length > capBytes) throw new Error("file exceeds size limit");
+  const buffer = Buffer.from(await media.arrayBuffer());
+  if (buffer.length > capBytes) throw new Error("file exceeds size limit");
+
+  const srcExt = (/\.[a-z0-9]+\b/i.exec(src.split("?")[0] ?? "")?.[0] ?? "").replace(".", "").toLowerCase();
+  const ext = opts.audio ? srcExt || "mp3" : "mp4";
+  return {
+    buffer,
+    ext,
+    title: j.data?.title?.slice(0, 90) || null,
+    nickname: j.data?.nickname ?? null,
+    mime: opts.audio
+      ? ext === "mp3"
+        ? "audio/mpeg"
+        : "audio/mp4"
+      : "video/mp4",
+  };
+}
+
+/**
+ * Download a VIDEO for any supported link, choosing the working path per host:
+ *   - TikTok  → tikwm API (yt-dlp extractor is IP-blocked)
+ *   - Instagram → hosted SenatorAPI when INSTAGRAM_API_KEY is set (yt-dlp's
+ *     extractor returns an empty media response from this IP); otherwise falls
+ *     through to yt-dlp (usually blocked — callers should explain).
+ *   - everything else (YouTube/Facebook/X/Pinterest/...) → yt-dlp.
+ */
+export async function downloadVideoSmart(
+  url: string,
+  opts: { maxSizeMb: number },
+): Promise<{ buffer: Buffer; ext: string; title: string | null; mime: string }> {
+  if (IS_TIKTOK_URL.test(url)) {
+    return downloadTikTok(url, { maxSizeMb: opts.maxSizeMb });
+  }
+  if (IS_INSTAGRAM_URL.test(url) && IG_API_KEY) {
+    try {
+      const d = await downloadInstagramViaApi(url, { maxSizeMb: opts.maxSizeMb });
+      return { buffer: d.buffer, ext: d.ext, title: d.title ?? null, mime: "video/mp4" };
+    } catch (err) {
+      logger.warn({ err, url }, "Instagram API download failed, falling back to yt-dlp");
+    }
+  }
+  const meta = await fetchMeta(url);
+  const { buffer, ext } = await download(url, {
+    format: VIDEO_FORMAT,
+    maxSizeMb: opts.maxSizeMb,
+  });
+  return { buffer, ext, title: meta.title, mime: "video/mp4" };
+}
+
 /**
  * YouTube player clients. `mweb` is the primary client — it provides direct
  * HTTPS stream URLs that work reliably from datacenter IPs (unlike `web` which

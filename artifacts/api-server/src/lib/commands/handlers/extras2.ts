@@ -9,7 +9,7 @@ import { downloadMediaMessage } from "@whiskeysockets/baileys";
 import type { Command, CommandContext } from "../types";
 import { db, activityLogTable, tenantsTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
-import { download, fetchMeta, downloadInstagramViaApi } from "../ytdlp";
+import { download, fetchMeta, downloadVideoSmart, isInstagramApiConfigured } from "../ytdlp";
 import { runProcess } from "../proc";
 import { getFfmpegPath } from "../ffmpeg";
 import { logger } from "../../logger";
@@ -72,12 +72,15 @@ async function sendMedia(ctx: CommandContext, url: string, asVideo: boolean): Pr
   await ctx.react("⏳");
   const isInstagram = IS_INSTAGRAM_URL.test(url);
   try {
-    // Instagram media: the bot's IP is blanket-blocked by Instagram (429 on
-    // every surface), so use the hosted SenatorAPI fallback first (clean
-    // infrastructure + media CDN), then fall back to local yt-dlp.
-    if (isInstagram) {
-      const dl = await downloadInstagramViaApi(url, { maxSizeMb: MAX_VIDEO_MB });
-      await ctx.sock.sendMessage(ctx.from, { video: dl.buffer, mimetype: "video/mp4", caption: `🎬 ${dl.title ?? url}` }, { quoted: ctx.msg });
+    if (asVideo) {
+      // Download a VIDEO smart-path: TikTok → tikwm API, Instagram → SenatorAPI
+      // (when a key is configured) or yt-dlp, everything else → yt-dlp.
+      const dl = await downloadVideoSmart(url, { maxSizeMb: MAX_VIDEO_MB });
+      await ctx.sock.sendMessage(
+        ctx.from,
+        { video: dl.buffer, mimetype: "video/mp4", caption: `🎬 ${dl.title ?? url}` },
+        { quoted: ctx.msg },
+      );
       await ctx.react("✅");
       return;
     }
@@ -86,16 +89,22 @@ async function sendMedia(ctx: CommandContext, url: string, asVideo: boolean): Pr
       format: VIDEO_FORMAT,
       maxSizeMb: MAX_VIDEO_MB,
     });
-    if (asVideo) {
-      await ctx.sock.sendMessage(ctx.from, { video: buffer, mimetype: "video/mp4", caption: `🎬 ${meta.title ?? url}` }, { quoted: ctx.msg });
-    } else {
-      await ctx.sock.sendMessage(ctx.from, { audio: buffer, mimetype: "audio/mp3", fileName: `${meta.title ?? "media"}.${ext}` }, { quoted: ctx.msg });
-    }
+    await ctx.sock.sendMessage(
+      ctx.from,
+      { audio: buffer, mimetype: "audio/mp3", fileName: `${meta.title ?? "media"}.${ext}` },
+      { quoted: ctx.msg },
+    );
     await ctx.react("✅");
   } catch (err) {
     logger.warn({ err, url, isInstagram }, "extras2 download failed");
     await ctx.react("❌");
-    await ctx.reply("❌ Couldn't download that. Link may be private or unsupported.");
+    if (isInstagram && !isInstagramApiConfigured()) {
+      await ctx.reply(
+        "❌ Instagram blocks downloads from this server, and the Instagram download key (INSTAGRAM_API_KEY) isn't set. Get a free key from @Api_ManagerRoBot and ask the bot owner to add it to the bot's env — then Instagram downloads will work.",
+      );
+    } else {
+      await ctx.reply("❌ Couldn't download that. Link may be private or unsupported.");
+    }
   }
 }
 
@@ -319,7 +328,7 @@ export const extras2Commands: Command[] = [
     name: "reels",
     category: "DOWNLOAD",
     desc: "Download an Instagram reel",
-    aliases: ["story", "ig", "instagram"],
+    aliases: ["story", "ig", "instagram", "igvideo"],
     handler: async (ctx) => {
       const url = ctx.text.trim();
       if (!/^https?:\/\/(www\.)?(instagram\.com|instagr\.am|ig\.me)\//i.test(url)) return ctx.reply("❌ Send an Instagram link.");

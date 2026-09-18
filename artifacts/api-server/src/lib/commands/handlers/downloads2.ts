@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Command, CommandContext } from "../types";
-import { fetchMeta, download } from "../ytdlp";
+import { fetchMeta, download, downloadTikTok, downloadVideoSmart, IS_TIKTOK_URL } from "../ytdlp";
 import { fetchBuffer } from "../http-utils";
 import { hostMatches } from "../url-utils";
 import { tryAcquire } from "../limiter";
@@ -11,8 +11,6 @@ import { getFfmpegPath } from "../ffmpeg";
 import { logger } from "../../logger";
 
 const AUDIO_FORMAT = "18/bestaudio[ext=m4a]/best";
-const VIDEO_FORMAT =
-  "best[ext=mp4][height<=720]/best[height<=720]/best[ext=mp4]/best";
 const MAX_AUDIO_MB = 50;
 const MAX_VIDEO_MB = 64;
 const MAX_DURATION_S = 1800;
@@ -81,52 +79,37 @@ async function sendAudio(ctx: CommandContext, target: string): Promise<void> {
 
 async function sendVideo(ctx: CommandContext, target: string): Promise<void> {
   await ctx.react("⏳");
-  const meta = await fetchMeta(target);
-  const { buffer } = await download(target, { format: VIDEO_FORMAT, maxSizeMb: MAX_VIDEO_MB });
-  await ctx.sock.sendMessage(ctx.from, { video: buffer, mimetype: "video/mp4", caption: `🎬 ${meta.title}` }, { quoted: ctx.msg });
+  // TikTok/Instagram links route through their working API paths; everything
+  // else (plus search queries) goes through yt-dlp.
+  const dl = await downloadVideoSmart(target, { maxSizeMb: MAX_VIDEO_MB });
+  await ctx.sock.sendMessage(ctx.from, { video: dl.buffer, mimetype: "video/mp4", caption: `🎬 ${dl.title ?? "video"}` }, { quoted: ctx.msg });
   await ctx.react("✅");
 }
 
-/** Download a TikTok video via the public tikwm API (yt-dlp is IP-blocked). */
+/** TikTok audio/video via the public tikwm API (yt-dlp's extractor is IP-blocked). */
 async function tiktokApiDownload(ctx: CommandContext, wantAudio = false): Promise<void> {
   const input = arg(ctx);
-  if (!input || !/^https?:\/\/(www\.)?(tiktok\.com|vm\.tiktok\.com|vt\.tiktok\.com)\//i.test(input)) {
+  if (!input || !IS_TIKTOK_URL.test(input)) {
     await ctx.reply(`Send a TikTok link.\nExample: *${ctx.prefix}${ctx.command} https://vt.tiktok.com/...*`);
     return;
   }
   await ctx.react("⏳");
   try {
-    const res = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(input)}`, {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
-      signal: AbortSignal.timeout(30_000),
-    });
-    const j = (await res.json()) as { code?: number; data?: { title?: string; play?: string; music?: string; nickname?: string } };
-    const src = wantAudio ? j.data?.music : j.data?.play;
-    if (j.code !== 0 || !src) {
-      throw new Error("tikwm returned no media");
-    }
-    const media = await fetch(src, {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
-      signal: AbortSignal.timeout(60_000),
-    });
-    if (!media.ok) throw new Error(`tiktok CDN HTTP ${media.status}`);
-    const buffer = Buffer.from(await media.arrayBuffer());
-    const title = j.data?.title?.slice(0, 90) || "TikTok";
     if (wantAudio) {
-      await ctx.sock.sendMessage(ctx.from, { audio: buffer, mimetype: "audio/mp4", fileName: `${title.replace(/[^\w-]+/g, "_").slice(0, 40)}.mp4` }, { quoted: ctx.msg });
+      const dl = await downloadTikTok(input, { audio: true, maxSizeMb: MAX_AUDIO_MB });
+      await ctx.sock.sendMessage(
+        ctx.from,
+        { audio: dl.buffer, mimetype: dl.mime, fileName: `${(dl.title ?? "tt").replace(/[^\w-]+/g, "_").slice(0, 40)}.${dl.ext}` },
+        { quoted: ctx.msg },
+      );
     } else {
-      const caption = `🎬 *${title}*\nBy ${j.data?.nickname ?? "unknown"}`.slice(0, 250);
-      await ctx.sock.sendMessage(ctx.from, { video: buffer, mimetype: "video/mp4", caption }, { quoted: ctx.msg });
+      await sendVideo(ctx, input);
     }
     await ctx.react("✅");
   } catch (err) {
-    logger.warn({ err, cmd: ctx.command }, "tiktok api download failed");
-    try {
-      await sendVideo(ctx, input);
-    } catch {
-      await ctx.react("❌");
-      await ctx.reply("❌ Couldn't download that TikTok video (TikTok may be blocking this server right now). Try again later.");
-    }
+    logger.warn({ err, cmd: ctx.command }, "tiktok download failed");
+    await ctx.react("❌");
+    await ctx.reply("❌ Couldn't download that TikTok (TikTok may be blocking this server right now). Try again later.");
   }
 }
 
@@ -435,7 +418,7 @@ export const downloads2Commands: Command[] = [
     } },
 
   // TikTok
-  { name: "tiktokhd", category: "DOWNLOAD", desc: "TikTok HD video", aliases: ["tt", "tiktok", "tik"], handler: tiktokApiDownload },
+  { name: "tiktokhd", category: "DOWNLOAD", desc: "TikTok HD video", aliases: ["tt", "tiktok", "tik", "tiktokvideo"], handler: tiktokApiDownload },
   { name: "ttmp3", category: "DOWNLOAD", desc: "TikTok audio", handler: async (ctx) => tiktokApiDownload(ctx, true) },
   { name: "ttslide", category: "DOWNLOAD", desc: "TikTok slideshow", handler: videoCmd },
   { name: "xdl", category: "DOWNLOAD", desc: "X (Twitter) video", handler: videoCmd },
