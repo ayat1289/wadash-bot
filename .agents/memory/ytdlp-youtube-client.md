@@ -34,6 +34,27 @@ walled, re-probe YouTube clients (`yt-dlp -j --extractor-args
 "youtube:player_client=<c>" -- "ytsearch1:test"`) and swap the search prefix /
 client to whatever currently returns JSON.
 
+## YouTube is unblockable ONLY with cookies (as of 2026)
+
+Exhaustive re-test (Sep 2026) confirmed no player client / PO-token/POT-provider
+setup defeats the block from this IP — the ban is applied at the player-API
+level *before* tokens matter, for **every** client (android, tv, web_safari, ios,
+mweb, android_vr, android_music, ytmusic, ios_music, web_creator, tv_simply,
+web_embedded, tv_embedded, web_music, `default,-web_safari`). The ONLY reliable
+bypass shipped in the app is **browser cookies**: the operator sets
+`YOUTUBE_COOKIES` (cookies.txt CONTENT) or `YOUTUBE_COOKIES_FILE` (mounted path)
+in `docker/.env`. `commands/ytdlp.ts` writes it once to a temp file (memorized,
+removed on exit) and passes `--cookies` to every invocation.
+
+While cookies are set, download.ts/downloads2.ts flip the audio name-search
+prefix from `scsearch1:` to `ytsearch1:` (constants `AUDIO_SEARCH_PREFIX` /
+`AUDIO_SEARCH`, computed at module load from env), and name-based *video* also
+activates (`.play` reply `2`, `.ytmp4`/`.video` name search). Without cookies,
+audio stays SoundCloud-first and video-by-name replies with a clear "YouTube
+blocks this server" message. Export cookies with the "Get cookies.txt LOCALLY"
+extension (fresh incognito session), refresh when the bot-check returns, and
+never commit the file/secret.
+
 ## Why yt-dlp is vendored (not the Nix `yt-dlp`)
 
 The Nix-provided `yt-dlp` is pinned to an old release whose **SoundCloud-search
@@ -41,20 +62,23 @@ extractor is broken** (builds an `api.soundcloud.com/tracks/soundcloud%3Atracks%
 URL no extractor matches). So a current, pinned yt-dlp is committed at
 `artifacts/api-server/bin/yt-dlp`.
 
-It is the official **self-contained PyInstaller build** (`yt-dlp_linux`, ~39MB
-ELF) run **DIRECTLY** — NOT via `python3`. An earlier *zipapp + Nix python3*
-approach died in production because the Nix store's `libssl.so.3` was corrupted
-(EIO) in the published image (and republishing reused the cached content-addressed
-path, so it stayed broken). The PyInstaller binary bundles its own CPython +
-OpenSSL (extracted to /tmp at runtime) so it never touches the Nix openssl.
+It is currently a pinned **python3 zipapp** (~3MB) committed at
+`artifacts/api-server/bin/yt-dlp`, run via a bare `yt-dlp` command (python3 must
+be present in the runtime image — the Dockerfile apt-get includes python3). It is
+NOT invoked as a bare self-contained ELF; earlier infra used a PyInstaller build
+or a *zipapp + Nix python3* approach, and the latter died in production because
+the Nix store's `libssl.so.3` was corrupted (EIO) in the published image (and
+republishing reused the cached content-addressed path, so it stayed broken).
+The vendored binary bundles its own CPython + OpenSSL (extracted to /tmp at
+runtime) so it never touches the Nix openssl.
 
 **Why:** committed `bin/` survives deploys (esbuild-only prod build; `data/` +
 `.pythonlibs` are gitignored), and the self-contained binary sidesteps the
 corrupted-Nix-store class of failure.
 **How to apply:** the runner in `commands/ytdlp.ts` anchors the path via
 `import.meta.url` (app always runs as bundled `dist/index.mjs`). To bump yt-dlp,
-download a pinned `yt-dlp_linux` release over `bin/yt-dlp`, keep its executable
-bit, and re-verify `scsearch1:` resolves a full track — the SoundCloud-search
+download a pinned release's zipapp over `bin/yt-dlp`, keep its executable bit,
+and re-verify `scsearch1:` resolves a full track — the SoundCloud-search
 extractor regresses across versions (known-good: 2026.06.09).
 
 ## Prod-only "audio won't play" / `.play` failures = SoundCloud network timeout, NOT ffmpeg

@@ -31,7 +31,14 @@ const ALLOWED = [
   "mediafire.com", "onedrive.live.com", "drive.google.com",
 ];
 
-const SOUNDCLOUD_SEARCH = "scsearch1";
+// Audio name searches use SoundCloud by default (YouTube blocks this host's
+// IP). When the operator sets YOUTUBE_COOKIES(/_FILE), YouTube is unblocked and
+// name searches switch to YouTube's catalog (bigger hit rate, plus the audio
+// and name-video commands all work).
+const AUDIO_SEARCH: "ytsearch1" | "scsearch1" = process.env.YOUTUBE_COOKIES ||
+  process.env.YOUTUBE_COOKIES_FILE
+  ? "ytsearch1"
+  : "scsearch1";
 
 function isUrl(s: string): boolean {
   return /^https?:\/\//i.test(s.trim());
@@ -139,7 +146,7 @@ async function audioCmd(ctx: CommandContext): Promise<void> {
       }
       await sendAudio(ctx, input);
     } else {
-      await sendAudio(ctx, `${SOUNDCLOUD_SEARCH}:${input}`);
+      await sendAudio(ctx, `${AUDIO_SEARCH}:${input}`);
     }
   } catch (err) {
     logger.warn({ err, cmd: ctx.command }, "audio download failed");
@@ -167,7 +174,12 @@ async function videoCmd(ctx: CommandContext): Promise<void> {
       await sendVideo(ctx, `${SEARCH}:${input}`);
     } catch {
       await ctx.react("❌");
-      await ctx.reply("❌ Couldn't find or download that video. Try a *direct link* or a different search.");
+      const blocked = !(process.env.YOUTUBE_COOKIES || process.env.YOUTUBE_COOKIES_FILE);
+      await ctx.reply(
+        blocked
+          ? "❌ YouTube blocks downloads from this server (it's the hosting IP, not the video). For audio, try *%pplay <song name>* — or send a *direct link*."
+          : "❌ Couldn't find or download that video. Try a *direct link* or a different search.",
+      );
     }
     return;
   }
@@ -276,14 +288,14 @@ async function searchHandler(ctx: CommandContext): Promise<void> {
   }
   await ctx.react("🔍");
   try {
-    const items = await listItems(`${SOUNDCLOUD_SEARCH}:${q}`, 5);
+    const items = await listItems(`${AUDIO_SEARCH}:${q}`, 5);
     if (items.length === 0) {
       await ctx.reply("❌ No results found.");
       return;
     }
     const lines = items.map((e, i) => `${i + 1}. ${e.title}`).join("\n");
     await ctx.reply(`🔍 *Top results for "${q}":*\n${lines}\n\n▶️ Playing the top result…`);
-    await sendAudio(ctx, `${SOUNDCLOUD_SEARCH}:${q}`);
+    await sendAudio(ctx, `${AUDIO_SEARCH}:${q}`);
   } catch {
     await ctx.reply("❌ Search failed right now. Try again later.");
   }
@@ -310,7 +322,7 @@ async function audioWithFfmpeg(
   try {
     dir = await mkdtemp(join(tmpdir(), "proc-"));
     await ctx.react("⏳");
-    const target = isUrl(input) && hostMatches(input, ALLOWED) ? input : `${SOUNDCLOUD_SEARCH}:${input}`;
+    const target = isUrl(input) && hostMatches(input, ALLOWED) ? input : `${AUDIO_SEARCH}:${input}`;
     const { buffer } = await download(target, { format: AUDIO_FORMAT, audio: true, maxSizeMb: MAX_AUDIO_MB });
     const inPath = join(dir, "in.mp3");
     const outPath = join(dir, outName);
@@ -370,11 +382,11 @@ export const downloads2Commands: Command[] = [
         await ctx.reply("Usage: *" + ctx.prefix + "charts <genre/vibe>* — e.g. .charts pop");
         return;
       }
-      const items = await listItems(`${SOUNDCLOUD_SEARCH}:${input}`, 8);
+      const items = await listItems(`${AUDIO_SEARCH}:${input}`, 8);
       await ctx.reply(items.length ? `📈 *Results:*\n${items.map((e, i) => `${i + 1}. ${e.title}`).join("\n")}` : "❌ No results.");
     } },
   { name: "trendingmusic", category: "DOWNLOAD", desc: "Trending music search", handler: async (ctx) => {
-      const items = await listItems(`${SOUNDCLOUD_SEARCH}:trending`, 8);
+      const items = await listItems(`${AUDIO_SEARCH}:trending`, 8);
       await ctx.reply(items.length ? `🔥 *Trending now:*\n${items.map((e, i) => `${i + 1}. ${e.title}`).join("\n")}` : "❌ No results.");
     } },
 

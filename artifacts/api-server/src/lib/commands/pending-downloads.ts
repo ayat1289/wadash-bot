@@ -19,6 +19,8 @@ export interface PendingDownload {
   videoTarget: string;
   /** True when `.play` was given a direct link (video is only attempted then). */
   fromUrl: boolean;
+  /** True when video-by-name can be attempted (YouTube unblocked via cookies). */
+  videoAllowed?: boolean;
   /** Track title, used for the file name / caption. */
   title: string;
   createdAt: number;

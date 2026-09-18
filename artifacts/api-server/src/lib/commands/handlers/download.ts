@@ -12,6 +12,17 @@ import {
 } from "../pending-downloads";
 
 const AUDIO_FORMAT = "18/bestaudio[ext=m4a]/best";
+// Name searches resolve via SoundCloud by default (YouTube blocks this host's
+// IP). When the operator sets YOUTUBE_COOKIES(/_FILE) YouTube is unblocked, so
+// audio name searches (and name-based video below) switch to YouTube's catalog.
+const AUDIO_SEARCH_PREFIX: "ytsearch1" | "scsearch1" = process.env.YOUTUBE_COOKIES ||
+  process.env.YOUTUBE_COOKIES_FILE
+  ? "ytsearch1"
+  : "scsearch1";
+// Name-based VIDEO downloads only work when YouTube is unblocked (cookies).
+const VIDEO_SEARCH_OK = Boolean(
+  process.env.YOUTUBE_COOKIES || process.env.YOUTUBE_COOKIES_FILE,
+);
 const VIDEO_FORMAT =
   "best[ext=mp4][height<=720]/best[height<=720]/best[ext=mp4]/best";
 // Pinterest-specific: prefer a single self-contained format (so a merge isn't
@@ -252,8 +263,10 @@ async function sendPinterest(ctx: CommandContext, target: string): Promise<void>
 /**
  * Resolve a user argument to a yt-dlp target: a vetted public URL or a search.
  * Non-URL input resolves through the passed search prefix — audio commands use
- * SoundCloud (`scsearch1`); video commands keep `ytsearch1` (a name search still
- * fails on YouTube from this host, but the caller's error message explains it).
+ * the cookies-aware AUDIO_SEARCH_PREFIX (SoundCloud by default, YouTube when
+ * cookies are configured); video commands keep `ytsearch1`. A name search that
+ * fails against YouTube (no cookies) gets a clear "host block" message instead
+ * of a generic download error.
  */
 async function fromUrlOrSearch(
   ctx: CommandContext,
@@ -270,15 +283,31 @@ async function fromUrlOrSearch(
     }
     await send(ctx, input);
   } else {
-    await send(ctx, `${searchPrefix}:${input}`);
+    const target = `${searchPrefix}:${input}`;
+    try {
+      await send(ctx, target);
+    } catch (err) {
+      if (
+        searchPrefix === "ytsearch1" &&
+        !VIDEO_SEARCH_OK
+      ) {
+        await ctx.reply(
+          `❌ YouTube blocks downloads from this server (it's the hosting IP, not the song). For audio, try *${ctx.prefix}play <song name>* (SoundCloud) — or send a direct link.`,
+        );
+        return;
+      }
+      throw err;
+    }
   }
 }
 
 /**
  * Interactive `.play` / `.song`: resolve the track, show it, and ask the user to
- * reply `1` (audio/mp3). The download itself happens when they answer — see
- * `handleDownloadSelection`, wired into the message loop. Name search uses
- * SoundCloud (`scsearch1`) because YouTube blocks this server's IP entirely.
+ * reply `1` (audio/mp3) or `2` (video/mp4, only for links or when YouTube
+ * cookies are configured). The download itself happens when they answer — see
+ * `handleDownloadSelection`, wired into the message loop. Name audio search uses
+ * SoundCloud by default (YouTube blocks this server's IP) and flips to YouTube
+ * automatically once YOUTUBE_COOKIES is set.
  */
 async function startPlay(ctx: CommandContext, input: string): Promise<void> {
   const url = isUrl(input);
@@ -289,7 +318,7 @@ async function startPlay(ctx: CommandContext, input: string): Promise<void> {
     return;
   }
   await ctx.react("🔎");
-  const target = url ? input : `scsearch1:${input}`;
+  const target = url ? input : `${AUDIO_SEARCH_PREFIX}:${input}`;
   try {
     const meta = await fetchMeta(target);
     if (meta.duration && meta.duration > MAX_DURATION_S) {
@@ -302,11 +331,13 @@ async function startPlay(ctx: CommandContext, input: string): Promise<void> {
       meta.webpageUrl && hostMatches(meta.webpageUrl, MEDIA_DOMAINS)
         ? meta.webpageUrl
         : target;
-    const videoTarget = url ? input : `scsearch1:${input}`;
+    const videoTarget = url ? input : `ytsearch1:${input}`;
     setPendingDownload(ctx.tenantId, ctx.from, ctx.sender, {
       audioTarget,
       videoTarget,
       fromUrl: url,
+      // Name-based video is only selectable when YouTube is unblocked (cookies).
+      videoAllowed: url || VIDEO_SEARCH_OK,
       title: meta.title,
     });
 
@@ -320,7 +351,9 @@ async function startPlay(ctx: CommandContext, input: string): Promise<void> {
   } catch (err) {
     logger.warn({ err, cmd: "play", input }, "play search failed");
     await ctx.reply(
-      "❌ Couldn't find that song. Check the spelling, or send a direct SoundCloud / TikTok / Instagram link. (YouTube blocks downloads from this server.)",
+      VIDEO_SEARCH_OK
+        ? "❌ Couldn't find that song. Check the spelling, or send a direct YouTube / SoundCloud / TikTok / Instagram link."
+        : "❌ Couldn't find that song. Check the spelling, or send a direct SoundCloud / TikTok / Instagram link. (Name search uses SoundCloud — YouTube blocks downloads from this server.)",
     );
   }
 }
@@ -366,9 +399,9 @@ export async function handleDownloadSelection(opts: {
   };
   const s: Sendable = { sock, from, msg, react, reply };
 
-  // Video by song name can't be delivered (YouTube blocks this host). Keep the
-  // pending entry so the user can still choose audio instead.
-  if (choice === "video" && !pending.fromUrl) {
+  // Video by song name needs YouTube unblocked (cookies configured) — otherwise
+  // keep the pending entry so the user can still choose audio instead.
+  if (choice === "video" && !pending.videoAllowed) {
     await reply(
       "🎬 Video isn't available for a song name. Send a *link* (YouTube / TikTok / Instagram / Facebook) and pick *2* — or reply *1* for the audio 🎵.",
     );
@@ -497,7 +530,7 @@ async function spotifyHandler(ctx: CommandContext, input: string): Promise<void>
     await ctx.reply("❌ Couldn't read that Spotify track.");
     return;
   }
-  const searchTarget = `scsearch1:${title}`;
+  const searchTarget = `${AUDIO_SEARCH_PREFIX}:${title}`;
   const meta = await fetchMeta(searchTarget);
   if (meta.duration && meta.duration > MAX_DURATION_S) {
     await ctx.reply(`❌ That track is too long (${fmtDuration(meta.duration)}).`);
@@ -607,7 +640,7 @@ export const downloadCommands: Command[] = [
     category: "DOWNLOAD",
     desc: "Download audio (MP3) from a search or link",
     usage: "Usage: *%pytmp3 <song name or link>*",
-    run: (ctx, input) => fromUrlOrSearch(ctx, input, sendAudio, "scsearch1"),
+    run: (ctx, input) => fromUrlOrSearch(ctx, input, sendAudio, AUDIO_SEARCH_PREFIX),
   }),
   // --- Video (also listed under the VIDEO menu) ---
   dl({
@@ -646,7 +679,7 @@ export const downloadCommands: Command[] = [
   dl({
     name: "spotify",
     category: "DOWNLOAD",
-    desc: "Download a Spotify track (via YouTube audio)",
+    desc: "Download a Spotify track's audio by name",
     usage: "Usage: *%pspotify <Spotify track link>*",
     run: spotifyHandler,
   }),

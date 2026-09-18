@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -148,6 +148,64 @@ const NET_ARGS = [
   "10",
 ];
 
+// ---------------------------------------------------------------------------
+// YouTube cookies.
+//
+// This host's IP is blanket-blocked by YouTube ("Sign in to confirm you're not
+// a bot") for EVERY player client — android, tv, web_music, android_music,
+// ios_music, web_creator, tv_simply, android_vr, web_embedded, you name it. The
+// block is applied at the player-API level BEFORE tokens/clients matter, so no
+// extractor-args or PO-token config fixes it from this IP. The only reliable
+// bypass is a real browser session: yt-dlp's `--cookies` accepts a Netscape-
+// format cookies.txt export, and with a fresh YouTube session community reports
+// confirm datacenter-IP downloads work again.
+//
+// To enable it, set either:
+//   YOUTUBE_COOKIES      — the raw cookies.txt CONTENT (as a secret/env var)
+//   YOUTUBE_COOKIES_FILE — a path to a cookies.txt mounted into the container
+//
+// The content is written once to a temp file (reused by every invocation;
+// removed on exit). While it is set, the audio handlers flip their name-search
+// prefix to `ytsearch1` so the full YouTube catalog becomes searchable, and
+// name-based video downloads also work. Without cookies, name search stays on
+// SoundCloud (which is not blocked from this host).
+// ---------------------------------------------------------------------------
+
+let cookiesPath: string | null | undefined;
+
+function getCookiesPath(): string | null {
+  if (cookiesPath !== undefined) return cookiesPath;
+  cookiesPath = null;
+  try {
+    const filePath = process.env.YOUTUBE_COOKIES_FILE?.trim();
+    const raw = (
+      filePath ? readFileSync(filePath, "utf8") : (process.env.YOUTUBE_COOKIES ?? "")
+    ).trim();
+    if (!raw) return null;
+    const p = join(tmpdir(), `yt-cookies-${process.pid}.txt`);
+    writeFileSync(p, `${raw}\n`, { mode: 0o600 });
+    process.once("exit", () => {
+      try {
+        rmSync(p, { force: true });
+      } catch {
+        /* best-effort cleanup */
+      }
+    });
+    cookiesPath = p;
+  } catch (err) {
+    logger.warn(
+      { err },
+      "YouTube cookies could not be loaded (YOUTUBE_COOKIES/YOUTUBE_COOKIES_FILE) — YouTube stays blocked",
+    );
+  }
+  return cookiesPath;
+}
+
+function cookieArgs(): string[] {
+  const p = getCookiesPath();
+  return p ? ["--cookies", p] : [];
+}
+
 /**
  * Resolve which yt-dlp to run. We vendor the official **self-contained**
  * PyInstaller build (`yt-dlp_linux`) at `artifacts/api-server/bin/yt-dlp` and
@@ -226,6 +284,7 @@ export async function fetchInfo(
   const args = [
     ...r.baseArgs,
     ...DENO_ARGS,
+    ...cookieArgs(),
     "-J",
     "--no-warnings",
     "--no-playlist",
@@ -277,6 +336,7 @@ export async function download(
     const args = [
       ...r.baseArgs,
       ...DENO_ARGS,
+      ...cookieArgs(),
       "-o",
       join(dir, "media.%(ext)s"),
       "--no-warnings",
