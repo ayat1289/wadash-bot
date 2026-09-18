@@ -54,6 +54,10 @@ Thumbs.db
 # VPS production secrets (written by the deploy workflow)
 /docker/.env
 
+# YouTube cookies (Netscape cookies.txt) — real content must never be committed.
+# An EMPTY placeholder `cookies.txt` is tracked so compose mounts stay valid.
+cookies.txt
+
 # WhatsApp auth/session state — runtime secrets (committed by explicit request for backup)
 
 

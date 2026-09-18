@@ -14,6 +14,7 @@ artifacts/api-server/data/captures
 Dockerfile
 docker-compose.yml
 docker
+cookies.txt
 .github
 tmp
 out-tsc

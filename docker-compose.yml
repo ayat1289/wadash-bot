@@ -27,6 +27,10 @@ services:
       - "8080:8080"
     volumes:
       - wadata:/app/artifacts/api-server/data
+      # Optional YouTube cookies.txt, mounted read-only at /app/cookies.txt.
+      # Set YOUTUBE_COOKIES_FILE=/app/cookies.txt in docker/.env to enable
+      # YouTube downloads (the file may be empty/absent in which case it's inert).
+      - ./cookies.txt:/app/cookies.txt:ro
     depends_on:
       db:
         condition: service_healthy
