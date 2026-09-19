@@ -98,12 +98,14 @@ async function sendMedia(ctx: CommandContext, url: string, asVideo: boolean): Pr
   } catch (err) {
     logger.warn({ err, url, isInstagram }, "extras2 download failed");
     await ctx.react("❌");
-    if (isInstagram && !isInstagramApiConfigured()) {
+    if (isInstagram && !isInstagramApiConfigured() && !process.env.COBALT_URL) {
       await ctx.reply(
-        "❌ Instagram blocks downloads from this server, and the Instagram download key (INSTAGRAM_API_KEY) isn't set. Get a free key from @Api_ManagerRoBot and ask the bot owner to add it to the bot's env — then Instagram downloads will work.",
+        "❌ Instagram blocks downloads from this server (empty response on every path). The Cobalt downloader also can't reach it from this IP. Fixes: add Instagram session cookies to `cobalt-cookies.json` in the bot's folder, or set an `INSTAGRAM_API_KEY` (free key from @Api_ManagerRoBot) in docker/.env.",
       );
     } else {
-      await ctx.reply("❌ Couldn't download that. Link may be private or unsupported.");
+      await ctx.reply(
+        "❌ Instagram is blocking this server's IP right now. If the bot owner configured Cobalt cookies or the IG download key, try again later — otherwise send a public reel link you can open in an incognito tab.",
+      );
     }
   }
 }

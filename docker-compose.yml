@@ -23,6 +23,9 @@ services:
       NODE_ENV: production
       PORT: "8080"
       TELEGRAM_POLLING: "1"
+      # Free/open-source Cobalt API instance (see `cobalt` service below) used as
+      # the downloader backbone for TikTok/Instagram (+ YouTube when unblocked).
+      COBALT_URL: "http://cobalt:9000"
     ports:
       - "8080:8080"
     volumes:
@@ -34,6 +37,28 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+  # Cobalt — free, open-source, self-hosted media downloader API (imputnet/cobalt).
+  # Resolves TikTok/Instagram/YouTube/etc. and mirrors the media back through its
+  # /tunnel endpoint. Instagram & YouTube are IP-blocked from this host's NIC, so
+  # to unlock them either:
+  #   1) drop per-service cookies into cobalt-cookies.json (see
+  #      docs/examples/cookies.example.json in the cobalt repo for the format), or
+  #   2) uncomment API_EXTERNAL_PROXY below to route resolution through another
+  #      egress (e.g. this host's rotating VPN proxy at http://127.0.0.1:6969).
+  cobalt:
+    image: ghcr.io/imputnet/cobalt:11
+    init: true
+    read_only: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9000:9000"
+    environment:
+      API_URL: "http://cobalt:9000/"
+      COOKIE_PATH: "/cookies.json"
+      # API_EXTERNAL_PROXY: "http://user:pass@127.0.0.1:6969"
+    volumes:
+      - ./cobalt-cookies.json:/cookies.json:ro
 
 volumes:
   pgdata:

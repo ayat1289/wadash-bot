@@ -36,6 +36,35 @@ were REMOVED. Instagram lives ONLY in extras2 `reels` (aliases
 `.igvideo` handler elsewhere that talks directly to yt-dlp, it will silently
 break again.
 
+## Cobalt (free/OSS) is the downloader backbone; IP block is the real enemy
+
+Deep-research + live-test (Sep 2026): the ONLY bankable lever is egress IP.
+Verified on this host: yt-dlp, oembed/og, the IG graphql `__a=1`, AND a
+self-hosted **imputnet/cobalt** API all return *empty* for Instagram and a
+*bot-check/login* for YouTube from the host NIC — every tool fetches from the
+same blocked IP, so swapping tools changes nothing. TikTok is the exception:
+both the **tikwm** API and **cobalt** resolve and stream real media from here
+(cobalt's /tunnel even supports Range).
+
+So `docker-compose.yml` now runs a `cobalt` service (ghcr.io/imputnet/cobalt:11,
+bound 127.0.0.1:9000, `API_URL=http://cobalt:9000/`, cookies at
+`/cookies.json`). `ytdlp.ts` exports `downloadCobalt(url,{audio,maxSizeMb})`
+(general + tunnel stream + size cap) and routes `downloadVideoSmart`:
+TikTok → Cobalt→tikwm fallback; Instagram → Cobalt→SenatorAPI(key)→yt-dlp; else
+yt-dlp. The bot passes `COBALT_URL=http://cobalt:9000`.
+
+Instagram & YouTube stay blocked UNTIL one of two unlocks is applied (both
+plumbed, no code change needed):
+  1. **cookies**: real session cookies into `./cobalt-cookies.json` (COBALT
+     format, not Netscape; see imputnet/cobalt docs/examples/cookies.example.json).
+  2. **proxy egress**: uncomment `API_EXTERNAL_PROXY` on the cobalt service —
+     this host already runs a free/OSS **rotating VPN proxy** (`vpn-front-squid`,
+     squid on 127.0.0.1:6969, `vpn-worker-*` exit nodes, Basic-auth). It will
+     bypass the blocks, but burns the user's VPN egress bandwidth, so it is
+     intentionally left OFF — ask before enabling.
+The old paid-only message was replaced to point at these two options. A paid
+`INSTAGRAM_API_KEY` (SenatorAPI) remains as a third, non-default fallback.
+
 Audio commands (`.play`/`.song`/`.ytmp3`) download from **SoundCloud**, not
 YouTube. Search uses the `scsearch1:<query>` prefix (in `handlers/download.ts`).
 Video commands (`.ytmp4`/`.video`) with a **typed name** are short-circuited in

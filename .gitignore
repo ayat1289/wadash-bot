@@ -58,6 +58,10 @@ Thumbs.db
 # An EMPTY placeholder `cookies.txt` is tracked so compose mounts stay valid.
 cookies.txt
 
+# Cobalt API cookies (per-service session cookies for Instagram/YouTube) — real
+# content must never be committed. An EMPTY placeholder is tracked for mounts.
+cobalt-cookies.json
+
 # WhatsApp auth/session state — runtime secrets (committed by explicit request for backup)
 
 

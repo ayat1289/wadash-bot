@@ -117,6 +117,78 @@ export const IS_INSTAGRAM_URL =
 const VIDEO_FORMAT =
   "best[ext=mp4][height<=720]/best[height<=720]/best[ext=mp4]/best";
 
+/** URL of the self-hosted open-source Cobalt API instance (see docker-compose). */
+const COBALT_URL = (process.env.COBALT_URL || "").replace(/\/+$/, "");
+
+/**
+ * Download via the free, open-source Cobalt media downloader API
+ * (imputnet/cobalt). Resolves the post and mirrors media back through the
+ * instance's /tunnel endpoint. Handles both relative and absolute tunnel URLs.
+ */
+export async function downloadCobalt(
+  url: string,
+  opts: { audio?: boolean; maxSizeMb: number },
+): Promise<{
+  buffer: Buffer;
+  ext: string;
+  title: string | null;
+  filename: string | null;
+  mime: string;
+}> {
+  if (!COBALT_URL) throw new Error("COBALT_URL is not configured");
+  const res = await fetch(`${COBALT_URL}/`, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({
+      url,
+      downloadMode: opts.audio ? "audio" : "auto",
+      audioFormat: "mp3",
+      videoQuality: "720",
+      filenameStyle: "basic",
+    }),
+    signal: AbortSignal.timeout(45_000),
+  });
+  if (!res.ok) throw new Error(`Cobalt API HTTP ${res.status}`);
+  const j = (await res.json()) as {
+    status?: string;
+    filename?: string;
+    mimeType?: string;
+    url?: string;
+    picker?: { url?: string; type?: string }[];
+    error?: { code?: string; reason?: string };
+  };
+  if (j.status === "error" || !j.url) {
+    const code = j.error?.code ?? "unknown";
+    throw new Error(code); // callers map known codes to friendly messages
+  }
+  if (j.status === "picker") {
+    const first = j.picker?.find((p) => p.url) ?? j.picker?.[0];
+    if (!first?.url) throw new Error("error.api.picker.empty");
+    j.url = first.url;
+  }
+  const tunnel = /^https?:\/\//i.test(j.url) ? j.url : `${COBALT_URL}${j.url}`;
+  const capBytes = opts.maxSizeMb * 1024 * 1024 * 1.2;
+  const media = await fetch(tunnel, {
+    headers: { Accept: "*/*", "User-Agent": "Mozilla/5.0" },
+    signal: AbortSignal.timeout(120_000),
+  });
+  if (!media.ok) throw new Error(`Cobalt tunnel HTTP ${media.status}`);
+  const length = Number(media.headers.get("content-length") ?? 0);
+  if (length && length > capBytes) throw new Error("file exceeds size limit");
+  const buffer = Buffer.from(await media.arrayBuffer());
+  if (buffer.length > capBytes) throw new Error("file exceeds size limit");
+
+  const name = j.filename ?? "";
+  const ext = (/\.[a-z0-9]+\b/i.exec(name)?.[0] ?? ".mp4").replace(".", "").toLowerCase() || "mp4";
+  return {
+    buffer,
+    ext,
+    title: (name.split(".")[0] ?? null)?.slice(0, 90) || null,
+    filename: name || null,
+    mime: opts.audio ? (ext === "mp3" ? "audio/mpeg" : "audio/mp4") : (j.mimeType ?? "video/mp4"),
+  };
+}
+
 /**
  * TikTok video/audio download. yt-dlp's TikTok extractor is IP-blocked from this
  * host ("Your IP address is blocked from accessing this post"), but the public
@@ -179,25 +251,46 @@ export async function downloadTikTok(
 
 /**
  * Download a VIDEO for any supported link, choosing the working path per host:
- *   - TikTok  → tikwm API (yt-dlp extractor is IP-blocked)
- *   - Instagram → hosted SenatorAPI when INSTAGRAM_API_KEY is set (yt-dlp's
- *     extractor returns an empty media response from this IP); otherwise falls
- *     through to yt-dlp (usually blocked — callers should explain).
+ *   - TikTok  → Cobalt (free/OSS, watermark-free) with the tikwm API as fallback
+ *     (yt-dlp's TikTok extractor is IP-blocked).
+ *   - Instagram → Cobalt first; the hosted SenatorAPI only when
+ *     INSTAGRAM_API_KEY is set; final fallback yt-dlp (usually blocked — callers
+ *     should explain). Without cobalt cookies/proxy configured, every path gets
+ *     an empty response from Instagram on this host's IP.
  *   - everything else (YouTube/Facebook/X/Pinterest/...) → yt-dlp.
  */
 export async function downloadVideoSmart(
   url: string,
   opts: { maxSizeMb: number },
-): Promise<{ buffer: Buffer; ext: string; title: string | null; mime: string }> {
+): Promise<{ buffer: Buffer; ext: string; title: string | null; mime: string; source: string }> {
   if (IS_TIKTOK_URL.test(url)) {
-    return downloadTikTok(url, { maxSizeMb: opts.maxSizeMb });
+    if (COBALT_URL) {
+      try {
+        const d = await downloadCobalt(url, { maxSizeMb: opts.maxSizeMb });
+        return { ...d, title: d.title ?? null, source: "cobalt" };
+      } catch (err) {
+        logger.warn({ err, url }, "Cobalt TikTok download failed, falling back to tikwm");
+      }
+    }
+    const d = await downloadTikTok(url, { maxSizeMb: opts.maxSizeMb });
+    return { buffer: d.buffer, ext: d.ext, title: d.title, mime: d.mime, source: "tikwm" };
   }
-  if (IS_INSTAGRAM_URL.test(url) && IG_API_KEY) {
-    try {
-      const d = await downloadInstagramViaApi(url, { maxSizeMb: opts.maxSizeMb });
-      return { buffer: d.buffer, ext: d.ext, title: d.title ?? null, mime: "video/mp4" };
-    } catch (err) {
-      logger.warn({ err, url }, "Instagram API download failed, falling back to yt-dlp");
+  if (IS_INSTAGRAM_URL.test(url)) {
+    if (COBALT_URL) {
+      try {
+        const d = await downloadCobalt(url, { maxSizeMb: opts.maxSizeMb });
+        return { buffer: d.buffer, ext: d.ext, title: d.title, mime: "video/mp4", source: "cobalt" };
+      } catch (err) {
+        logger.warn({ err, url }, "Cobalt Instagram download failed, trying other paths");
+      }
+    }
+    if (IG_API_KEY) {
+      try {
+        const d = await downloadInstagramViaApi(url, { maxSizeMb: opts.maxSizeMb });
+        return { buffer: d.buffer, ext: d.ext, title: d.title ?? null, mime: "video/mp4", source: "senator" };
+      } catch (err) {
+        logger.warn({ err, url }, "Instagram API download failed, falling back to yt-dlp");
+      }
     }
   }
   const meta = await fetchMeta(url);
@@ -205,7 +298,7 @@ export async function downloadVideoSmart(
     format: VIDEO_FORMAT,
     maxSizeMb: opts.maxSizeMb,
   });
-  return { buffer, ext, title: meta.title, mime: "video/mp4" };
+  return { buffer, ext, title: meta.title, mime: "video/mp4", source: "yt-dlp" };
 }
 
 /**
