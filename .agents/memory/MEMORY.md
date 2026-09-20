@@ -5,6 +5,7 @@
 - [Media command SSRF/DoS hardening](media-command-ssrf.md) — yt-dlp needs a domain allowlist (not just public-host); decode IPv4-mapped IPv6; limiter + size/process caps.
 - [Replit AI integrations proxy quirks](ai-proxy-quirks.md) — OpenRouter `models.list` 405s; validate models with a real completion/image call, not listing.
 - [yt-dlp audio source](ytdlp-youtube-client.md) — YouTube blocks ALL anonymous yt-dlp clients from this IP; audio routed to SoundCloud via a vendored self-contained yt-dlp binary (Nix pin's SoundCloud-search is broken); video-by-name short-circuits with a "paste a link" message.
+- [Proxy-resolve fix for IG/YT](ytdlp-proxy-resolve.md) — host IP is blocked for IG+YT APIs; set YTDLP_PROXY_URL (host's squid) and resolve the direct CDN URL via `--proxy -g`, then stream the media DIRECT — don't proxy the whole download.
 - [Nix store image corruption](nix-store-image-corruption.md) — prod-only native lib load error (e.g. yt-dlp libssl EIO) that works in dev = corrupted Nix store in published image; republish may NOT clear it (cached content-addressed path), fix = self-contained binary.
 - [WhatsApp auth state in git](wa-auth-secrets.md) — Baileys auth/session files under api-server/data/wa-auth are secrets that churn; gitignored, never commit (history still needs untracking).
 - [Anti-bug moderation](whatsapp-bot-design.md) — destructive heuristic moderation must split drop-vs-kick thresholds and fail closed only for dropping, never for the kick.
