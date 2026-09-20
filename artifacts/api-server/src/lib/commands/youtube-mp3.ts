@@ -62,21 +62,26 @@ async function convert(videoUrl: string): Promise<{
     j = await res.json().catch(() => null);
     if (!first) first = { status: res.status, j };
     if (j?.success && j.data?.slug) {
-      try {
-        const page = await fetch(FRONT + j.data.slug, {
-          headers: { "User-Agent": UA },
-          signal: AbortSignal.timeout(40_000),
-        });
-        const html = await page.text();
-        const hm = /https:\/\/[^"'\s]+get\.php\?[^"'\s]+/.exec(html);
-        if (hm) {
-          return {
-            title: j.data.info?.title ?? null,
-            size: typeof j.data.size === "number" ? j.data.size : null,
-            getUrl: hm[0],
-          };
-        }
-      } catch {}
+      // The download page sometimes needs a few seconds before it exposes the
+      // file link (conversion finishing on their side); poll it briefly.
+      for (let i = 0; i < 8; i++) {
+        try {
+          const page = await fetch(FRONT + j.data.slug, {
+            headers: { "User-Agent": UA },
+            signal: AbortSignal.timeout(40_000),
+          });
+          const html = await page.text();
+          const hm = /https:\/\/[^"'\s]+get\.php\?[^"'\s]+/.exec(html);
+          if (hm) {
+            return {
+              title: j.data.info?.title ?? null,
+              size: typeof j.data.size === "number" ? j.data.size : null,
+              getUrl: hm[0],
+            };
+          }
+        } catch {}
+        await new Promise((r) => setTimeout(r, 4000));
+      }
     }
     if (j?.success === false && /nonce|security|cookie/i.test(String(j.data))) {
       cachedNonce = null;

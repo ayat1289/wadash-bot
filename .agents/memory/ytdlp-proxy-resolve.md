@@ -1,44 +1,51 @@
-# YTDLP_PROXY_URL: fix IG/YT IP-blocks by resolving through proxy only
+# Free YouTube audio (no VPN/proxy — REMOVED by user directive)
 
-## Symptom
-YouTube ("Sign in to confirm you're not a bot") and Instagram (empty media
-response) are IP-blocked from this host's NIC (169.58.193.73) for EVERY yt-dlp
-client/cookies/po-token combination, AND every hosted API (Cobalt gave
-`error.api.fetch.empty` for IG, `error.api.youtube.login` for YT; yt-dlp,
-oembed/og, graphql all fail).
+## Dec 2025 user directive: "remove proxy/vpn from code forever."
+All proxy egress was removed: `YTDLP_PROXY_URL`, `proxyArgs()`,
+`downloadProxyStream()`, compose `extra_hosts`, docker/.env entry, env docs.
+Consequence accepted: Instagram reverted to senator(IG_API_KEY) → cobalt → plain
+yt-dlp (cobalt for IG may also fail from DC IP). YouTube audio now uses a free
+public converter API so yt-dlp is NOT needed for songs.
 
-## The trick (key insight)
-Do NOT pipe the whole download through the proxy (`--proxy` makes every fetch
-hop the VPN; big reels crawl at ~370 KiB/s and the rotating pool resets
-YouTube connections). Instead:
+## The free YouTube→MP3 converter (verified working 2025-12)
+No API key. Fully tested end-to-end from the production container (4201389-byte
+Blinding Lights mp3, ID3 header). Off-Site egress = this host's NIC; the
+converter does ALL the YouTube work, so the host IP-block (bot-check) is moot.
 
-1. RESOLVE the direct media URL (`yt-dlp ... --proxy $P -g <url>`) — one tiny
-   proxied request. IG probe reels resolve fine.
-2. STREAM the media DIRECT from the CDN (scontent.cdninstagram.com etc.) — the
-   host's DC IP can fetch CDN bytes at full speed (~1.3 MB/s) even though the
-   API/webpages are blocked.
+1. `POST https://youtubemp4free.com/wp-admin/admin-ajax.php`
+   - form: `action=yt_convert`, `nonce`, `youtube_url=https://youtube.com/watch?v=<id>`
+   - headers: `Origin: https://easyconv.com`, `X-Requested-With: mark.via.gp`,
+     `Referer: https://easyconv.com/`, UA `Chrome/126`, urlencoded content-type.
+   - nonce: scrape homepage `https://youtubemp4free.com/` regex
+     `/nonce["'\s]*[:=]\s*["']([0-9a-f]{10})["']/i`; fallback `1495b10e48`;
+     cache 5 min; on ajax `nonce|security|cookie` error reset cache and retry.
+   - response JSON: `{success:true, data:{slug, size, info:{title}}}`.
+2. `GET https://ryin.info/<slug>` → regex
+   `/https:\/\/[^"'\s]+get\.php\?[^"'\s]+/` for the file link. The link can take
+   a few seconds to appear (conversion finishing) → poll page up to ~8x/4s.
+3. `GET <file link>` (`https://*.ytmp3free.cc/get.php?cid=…&t=…&i=<b64 ip>`)
+   can return 0 bytes briefly → poll until bytes>0 and content-type
+   `audio|octet`, up to 8x/3.5s. Guard size via `data.size` (bytes) or buffer.
 
-Proxy bandwidth ≈ 0. Media = DC speed.
+Name queries (no VPN): Invidious **search only**
+`https://invidious.f5.si/api/v1/search?q=…&type=video&fields=videoId,title`
+(fallback `https://yewtu.be`) → first result videoId → converter. Don't touch
+invidious media endpoints (Anubis) or googlevideo player URLs (IP-signed → 403).
 
 ## Wiring
-- `artifacts/api-server/bin/yt-dlp` vendored binary; set `YTDLP_PROXY_URL`
-  (gitignored, in `docker/.env`) =
-  `http://proxyadmin:CdPWzN3ilJfJX0qIBygjXH2OHjTHJUJd@host.docker.internal:6969`
-- `host.docker.internal` resolves in the api container via compose
-  `extra_hosts: ["host.docker.internal:host-gateway"]` → docker0 gateway
-  172.17.0.1. Squid (`vpn-front-squid`) binds 0.0.0.0:6969 on the host. Basic
-  auth creds live only on host at `/root/ovpn/auth/credentials.txt`.
-- `ytdlp.ts`: `proxyArgs()`/`downloadProxyStream()` — only added to the IG/YT
-  paths in `downloadVideoSmart`; TikTok stays direct (tikwm → cobalt) so 58 MB
-  TT videos never burn proxy bandwidth. `fetchInfo/fetchMeta(target, viaProxy)`.
-- IG order: proxy → senator(IG_API_KEY) → cobalt. YT: proxy → plain yt-dlp.
+- `artifacts/api-server/src/lib/commands/youtube-mp3.ts`: `getNonce()`,
+  `convert(videoUrl)`, `downloadYouTubeAudioUrl(videoUrl, opts)`,
+  `searchYouTubeVideo(q)`, `tryYouTubeAudio(input, opts)` (URL → converter;
+  else search→converter; returns null, never throws).
+- `handlers/download.ts`: `sendAudio()` tries the converter for YouTube links
+  before yt-dlp; `.play`/`.song` (`startPlay`) tries it for names and YT links
+  (direct audio, skips the menu card). `handlers/downloads2.ts` `audioCmd(music)`
+  same fast-path. Fallbacks intact.
 
-## Gotchas
-- IG format filter `best[height<=*]` FAILS via proxy (progressive mp4 formats
-  report "unknown" height and get excluded). Use `-f best[ext=mp4]` there.
-- Cobalt's own `API_EXTERNAL_PROXY` (commented, same squid creds) FAILS with
-  `error.api.fetch.fail` — don't switch back to it.
-- YouTube remains flaky through the ROTATING pool (ConnectionReset on some
-  worker hops); retries absorb most, but it can still give up. True unlock =
-  browser cookies (`cookies.txt`/YOUTUBE_COOKIES) or Cobalt cookies.
-- Endpoint: health is at `/api/healthz` (not `/healthz`, not `/api/health`).
+## False paths (don't revisit)
+- TurboScribe `_htmx/...` endpoint user suggested: 401 w/o login + Cloudflare → dead.
+- VPN round-robin (~60 workers, ttl 1s) resets YouTube signed connections → 403.
+- Invidious public instances: media endpoints Anubis-gated; googlevideo URLs are
+  egress-IP-signed (403 from any other IP). Search-only.
+- Endpoint: health is `/api/healthz`. Note this file REPLACES the old
+  `ytdlp-proxy-resolve.md`; the proxy it documented is permanently removed.
