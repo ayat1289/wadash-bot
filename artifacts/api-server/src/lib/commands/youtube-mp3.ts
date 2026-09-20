@@ -2,9 +2,12 @@ import { logger } from "../logger";
 import { IS_YOUTUBE_URL } from "./ytdlp";
 
 /**
- * Free, ip-block-proof YouTube audio downloader backed by a public converter
- * network (youtubemp4free.com WordPress admin-ajax → ryin.info → ytmp3free.cc
- * storage). No cookies, no API keys, no VPN/proxy egress — the conversion runs
+ * Free, ip-block-proof YouTube audio downloader. Two independent public
+ * converter networks are used, newest-first, so the bot keeps working if one
+ * rate-limits us:
+ *   1. loader.to (YouLoader) → savenow.to CDN (default ~256k MP3),
+ *   2. youtubemp4free.com WordPress admin-ajax → ryin.info → ytmp3free.cc.
+ * No cookies on our side, no API keys, no VPN/proxy egress — conversions run
  * on THEIR servers and the finished MP3 is fetched directly.
  */
 
@@ -13,11 +16,100 @@ const HOME = "https://youtubemp4free.com/";
 const FRONT = "https://ryin.info/";
 const UA =
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36";
+const LOADER_HOME = "https://loader.to/";
+const LOADER_UP =
+  "https://loader.to/ajax/download.php";
+const LOADER_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 /** Optional YouTube search fallback via a public Invidious instance's REST API. */
 const INVIDIOUS = ["https://invidious.f5.si", "https://yewtu.be"];
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 let cachedNonce: { nonce: string; at: number } | null = null;
+
+function cookieJar(res: { headers: Headers }): string {
+  const get = (res.headers as any).getSetCookie as (() => string[]) | undefined;
+  const set = get?.call(res.headers) ?? [];
+  if (set.length) return set.map((c: string) => c.split(";")[0]).join("; ");
+  const single = res.headers.get("set-cookie");
+  return single ? single.split(";")[0] : "";
+}
+
+/**
+ * Primary converter: loader.to (YouLoader). Create a streaming job, then poll
+ * its progress endpoint until the savenow.to MP3 direct link is ready.
+ */
+async function loaderDownloadAudioUrl(
+  videoUrl: string,
+  opts: { maxSizeMb?: number },
+): Promise<{ buffer: Buffer; ext: string; mime: string; title: string | null }> {
+  const capBytes = (opts.maxSizeMb ?? 50) * 1024 * 1024;
+  const home = await fetch(LOADER_HOME, {
+    headers: { "User-Agent": LOADER_UA },
+    signal: AbortSignal.timeout(30_000),
+  });
+  const cookies = cookieJar(home);
+  const jobRes = await fetch(
+    `${LOADER_UP}?format=mp3&url=${encodeURIComponent(videoUrl)}`,
+    {
+      headers: {
+        "User-Agent": LOADER_UA,
+        Cookie: cookies,
+        "X-Requested-With": "XMLHttpRequest",
+        Referer: LOADER_HOME,
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(90_000),
+    },
+  );
+  const job = (await jobRes.json().catch(() => null)) as Record<string, any> | null;
+  if (!job?.success || !(job.id ?? job.progress_url)) {
+    throw new Error(`loader.to: no job (${jobRes.status})`);
+  }
+  const progUrl = job.progress_url ?? `https://loader.to/api/progress?id=${job.id}`;
+  let dl: string | null = null;
+  for (let i = 0; i < 20 && !dl; i++) {
+    const pr = await fetch(progUrl, {
+      headers: {
+        "User-Agent": LOADER_UA,
+        Cookie: cookies,
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(30_000),
+    });
+    const pj = (await pr.json().catch(() => null)) as Record<string, any> | null;
+    dl = pj?.download_url || pj?.url || pj?.dlink || null;
+    if (!dl) await sleep(4000);
+  }
+  if (!dl) throw new Error("loader.to: conversion never finished");
+
+  let buffer: Buffer | null = null;
+  let lastErr: unknown = null;
+  for (let i = 0; i < 6 && !buffer; i++) {
+    try {
+      const res = await fetch(dl!, {
+        headers: { "User-Agent": LOADER_UA, Cookie: cookies, Referer: LOADER_HOME },
+        signal: AbortSignal.timeout(180_000),
+      });
+      const bytes = Buffer.from(await res.arrayBuffer());
+      const ct = res.headers.get("content-type") ?? "";
+      if (bytes.length > 0 && /audio|octet|mpeg/.test(ct)) buffer = bytes;
+    } catch (err) {
+      lastErr = err;
+    }
+    if (!buffer) await sleep(3500);
+  }
+  if (!buffer) throw lastErr ?? new Error("loader.to: no audio bytes");
+  if (buffer.length > capBytes) throw new Error("file exceeds size limit");
+  return {
+    buffer,
+    ext: "mp3",
+    mime: "audio/mpeg",
+    title: (job.info && job.info.title) || job.title || null,
+  };
+}
 
 async function getNonce(): Promise<string> {
   if (cachedNonce && Date.now() - cachedNonce.at < 5 * 60_000) {
@@ -129,29 +221,40 @@ export async function downloadYouTubeAudioUrl(
 
 /**
  * One-shot "give me accurate YouTube audio": if `input` is a YouTube URL use it
- * directly; otherwise treat it as a song/name and search YouTube first. Returns
- * null when the converter/search can't resolve it, so callers fall back to
- * their existing (SoundCloud) path. Never throws.
+ * directly; otherwise treat it as a song/name and search YouTube first. Tries
+ * every free converter (loader.to first, youtubemp4free second) and returns
+ * null when all fail, so callers fall back to their existing (SoundCloud) path.
+ * Never throws.
  */
 export async function tryYouTubeAudio(
   input: string,
   opts: { maxSizeMb?: number } = {},
 ): Promise<{ buffer: Buffer; ext: string; mime: string; title: string | null } | null> {
+  let videoUrl: string;
   try {
     const trimmed = input.trim();
     if (IS_YOUTUBE_URL.test(trimmed)) {
-      return await downloadYouTubeAudioUrl(trimmed, opts);
+      videoUrl = trimmed;
+    } else {
+      const hit = await searchYouTubeVideo(trimmed);
+      if (!hit) return null;
+      videoUrl = `https://www.youtube.com/watch?v=${hit.videoId}`;
     }
-    const hit = await searchYouTubeVideo(trimmed);
-    if (!hit) return null;
-    return await downloadYouTubeAudioUrl(
-      `https://www.youtube.com/watch?v=${hit.videoId}`,
-      opts,
-    );
   } catch (err) {
-    logger.warn({ err, input }, "free YouTube audio failed");
+    logger.warn({ err, input }, "free YouTube audio resolve failed");
     return null;
   }
+  let lastErr: unknown = null;
+  for (const fn of [loaderDownloadAudioUrl, downloadYouTubeAudioUrl]) {
+    try {
+      return await fn(videoUrl, opts);
+    } catch (err) {
+      lastErr = err;
+      logger.warn({ err, input }, "free YouTube converter failed; trying next");
+    }
+  }
+  logger.warn({ input, lastErr }, "all free YouTube converters failed");
+  return null;
 }
 
 /**
