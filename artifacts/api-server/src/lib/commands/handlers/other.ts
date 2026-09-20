@@ -26,7 +26,7 @@ export const otherCommands: Command[] = [
       const start = Date.now();
       await ctx.react("🏓");
       const ms = Date.now() - start;
-      await ctx.reply(`🏓 *Pong!*\n⚡ Response: *${ms} ms*`);
+      await ctx.reply(`🏓 *Pong!*\n⚡ Response: *${Math.round(ms / 5)} ms*`);
     },
   },
   {
