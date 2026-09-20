@@ -28,11 +28,6 @@ services:
       COBALT_URL: "http://cobalt:9000"
     ports:
       - "8080:8080"
-    extra_hosts:
-      # Lets YTDLP_PROXY_URL in docker/.env point at the host's own VPN proxy
-      # (vpn-front-squid → 127.0.0.1:6969) as "http://user:pass@host.docker.internal:6969",
-      # which the IG/YT downloaders use ONLY to resolve media URLs (media streams direct).
-      - "host.docker.internal:host-gateway"
     volumes:
       - wadata:/app/artifacts/api-server/data
       # Optional YouTube cookies.txt, mounted read-only at /app/cookies.txt.

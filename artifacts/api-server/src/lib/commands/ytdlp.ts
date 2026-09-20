@@ -123,18 +123,6 @@ const VIDEO_FORMAT =
 const COBALT_URL = (process.env.COBALT_URL || "").replace(/\/+$/, "");
 
 /**
- * Optional upstream HTTP(S) proxy ("http://user:pass@host:port") used ONLY to
- * RESOLVE metadata/media URLs for hosts that IP-block this server (Instagram,
- * YouTube). The media itself is streamed DIRECT from the CDN once the URL is
- * known, so proxy bandwidth stays near zero. Leave empty to stay fully direct.
- */
-const YTDLP_PROXY = (process.env.YTDLP_PROXY_URL || "").trim();
-
-function proxyArgs(): string[] {
-  return YTDLP_PROXY ? ["--proxy", YTDLP_PROXY] : [];
-}
-
-/**
  * Download via the free, open-source Cobalt media downloader API
  * (imputnet/cobalt). Resolves the post and mirrors media back through the
  * instance's /tunnel endpoint. Handles both relative and absolute tunnel URLs.
@@ -264,81 +252,14 @@ export async function downloadTikTok(
 }
 
 /**
- * Download a VIDEO from a host that IP-blocks this server (Instagram, YouTube)
- * using the configured YTDLP_PROXY: yt-dlp resolves the direct media URL through
- * the proxy (one small request), then the media bytes are streamed DIRECT from
- * the CDN (full datacenter speed, near-zero proxy bandwidth). Enabled only when
- * YTDLP_PROXY_URL is set; otherwise throws so callers can fall back.
- */
-export async function downloadProxyStream(
-  url: string,
-  opts: { format?: string; audio?: boolean; maxSizeMb: number },
-): Promise<{ buffer: Buffer; ext: string; title: string | null; mime: string }> {
-  if (!YTDLP_PROXY) throw new Error("YTDLP_PROXY_URL is not configured");
-  const r = getRunner();
-  const title = (await fetchMeta(url, true).catch(() => null))?.title ?? null;
-  const g = await runProcess(
-    r.cmd,
-    [
-      ...r.baseArgs,
-      ...DENO_ARGS,
-      ...cookieArgs(),
-      ...(opts.audio ? ["-x", "--audio-format", "mp3", "--audio-quality", "5"] : []),
-      "--no-warnings",
-      "--no-playlist",
-      "--no-part",
-      ...NET_ARGS,
-      ...YT_EXTRACTOR_ARGS,
-      ...proxyArgs(),
-      "-f",
-      opts.format ?? VIDEO_FORMAT,
-      "-g",
-      "--",
-      url,
-    ],
-    { timeoutMs: 120_000 },
-  );
-  if (g.code !== 0 || !g.stdout.trim()) {
-    throw new Error(
-      `yt-dlp URL resolve failed (${g.code}): ${g.stderr.slice(-200)}`,
-    );
-  }
-  const mediaUrl = g.stdout.trim().split("\n")[0];
-  const capBytes = opts.maxSizeMb * 1024 * 1024 * 1.2;
-  const media = await fetch(mediaUrl, {
-    headers: { "User-Agent": "Mozilla/5.0", Accept: "*/*" },
-    signal: AbortSignal.timeout(120_000),
-  });
-  if (!media.ok) throw new Error(`media CDN HTTP ${media.status}`);
-  const length = Number(media.headers.get("content-length") ?? 0);
-  if (length && length > capBytes) throw new Error("file exceeds size limit");
-  const buffer = Buffer.from(await media.arrayBuffer());
-  if (buffer.length > capBytes) throw new Error("file exceeds size limit");
-
-  const ct = media.headers.get("content-type") ?? "";
-  const ext =
-    /\.[a-z0-9]{2,4}\b/i.exec(mediaUrl.split("?")[0] ?? "")?.[0]?.replace(".", "").toLowerCase() ??
-    (opts.audio ? "mp3" : "mp4");
-  return {
-    buffer,
-    ext,
-    title,
-    mime: opts.audio
-      ? ext === "mp3"
-        ? "audio/mpeg"
-        : "audio/mp4"
-      : (ct.includes("audio") ? "audio/mp4" : "video/mp4"),
-  };
-}
-
-/**
  * Download a VIDEO for any supported link, choosing the working path per host:
- *   - TikTok  → Cobalt (free/OSS, watermark-free) with the tikwm API as fallback
- *     (yt-dlp's TikTok extractor is IP-blocked).
- *   - Instagram → proxy-resolved yt-dlp (YTDLP_PROXY_URL) so the CDN streams
- *     direct; then hosted SenatorAPI when INSTAGRAM_API_KEY is set; then Cobalt.
- *   - YouTube → proxy-resolved yt-dlp when configured, else plain yt-dlp.
- *   - everything else (Facebook/X/Pinterest/...) → plain yt-dlp.
+ *   - TikTok    → Cobalt (free/OSS, watermark-free) with the tikwm API as
+ *     fallback (yt-dlp's TikTok extractor is IP-blocked).
+ *   - Instagram → SenatorAPI when INSTAGRAM_API_KEY is set, else Cobalt, else
+ *     plain yt-dlp.
+ *   - YouTube   → handled by the audio-ready free API in `youtube-mp3.ts`;
+ *     this function keeps plain yt-dlp as the generic path for everything else
+ *     (Facebook/X/Pinterest/...).
  */
 export async function downloadVideoSmart(
   url: string,
@@ -357,12 +278,8 @@ export async function downloadVideoSmart(
     return { buffer: d.buffer, ext: d.ext, title: d.title, mime: d.mime, source: "tikwm" };
   }
   if (IS_INSTAGRAM_URL.test(url)) {
-    for (const via of ["proxy", "senator", "cobalt"] as const) {
+    for (const via of ["senator", "cobalt"] as const) {
       try {
-        if (via === "proxy" && YTDLP_PROXY) {
-          const d = await downloadProxyStream(url, { maxSizeMb: opts.maxSizeMb });
-          return { ...d, source: "proxy" };
-        }
         if (via === "senator" && IG_API_KEY) {
           const d = await downloadInstagramViaApi(url, { maxSizeMb: opts.maxSizeMb });
           return { buffer: d.buffer, ext: d.ext, title: d.title ?? null, mime: "video/mp4", source: "senator" };
@@ -374,14 +291,6 @@ export async function downloadVideoSmart(
       } catch (err) {
         logger.warn({ err, url, via }, `Instagram download via ${via} failed, trying next`);
       }
-    }
-  }
-  if (IS_YOUTUBE_URL.test(url) && YTDLP_PROXY) {
-    try {
-      const d = await downloadProxyStream(url, { maxSizeMb: opts.maxSizeMb });
-      return { ...d, source: "proxy" };
-    } catch (err) {
-      logger.warn({ err, url }, "Proxied YouTube download failed, falling back to direct yt-dlp");
     }
   }
   const meta = await fetchMeta(url);
@@ -547,11 +456,8 @@ function getRunner(): YtRunner {
  * Fetch metadata for a yt-dlp target (URL or `scsearch1:`/`ytsearch1:` query)
  * without downloading the media. Throws if the target can't be resolved.
  */
-export async function fetchMeta(
-  target: string,
-  viaProxy = false,
-): Promise<YtMeta> {
-  const j = await fetchInfo(target, viaProxy);
+export async function fetchMeta(target: string): Promise<YtMeta> {
+  const j = await fetchInfo(target);
   return {
     title: typeof j.title === "string" ? j.title : "media",
     duration: typeof j.duration === "number" ? j.duration : null,
@@ -570,14 +476,12 @@ export async function fetchMeta(
  */
 export async function fetchInfo(
   target: string,
-  viaProxy = false,
 ): Promise<Record<string, any>> {
   const r = getRunner();
   const args = [
     ...r.baseArgs,
     ...DENO_ARGS,
     ...cookieArgs(),
-    ...(viaProxy ? proxyArgs() : []),
     "-J",
     "--no-warnings",
     "--no-playlist",

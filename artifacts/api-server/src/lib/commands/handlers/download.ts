@@ -1,6 +1,7 @@
 import type { WASocket } from "@whiskeysockets/baileys";
 import type { Command, CommandContext, WAMessage } from "../types";
 import { fetchMeta, fetchInfo, download, downloadVideoSmart } from "../ytdlp";
+import { tryYouTubeAudio } from "../youtube-mp3";
 import { fetchJson, fetchText, fetchBuffer, fetchImageBuffer } from "../http-utils";
 import { isPublicHttpUrl, hostMatches } from "../url-utils";
 import { tryAcquire } from "../limiter";
@@ -122,6 +123,24 @@ async function sendAudio(
   // That redundant lookup was a needless point of failure — under throttling it
   // can itself time out and sink the download after the user already picked a
   // format. Direct callers (.ytmp3 / .spotify) pass no `pre` and resolve here.
+  // YouTube links take the free converter path first (accurate audio, no IP
+  // block — see youtube-mp3.ts), falling back to yt-dlp only if it fails.
+  if (target && /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(target)) {
+    const dl = await tryYouTubeAudio(target, { maxSizeMb: MAX_AUDIO_MB });
+    if (dl) {
+      await s.sock.sendMessage(
+        s.from,
+        {
+          audio: dl.buffer,
+          mimetype: dl.mime,
+          fileName: `${(dl.title ?? pre?.title ?? "audio").replace(/[^\w-]+/g, "_").slice(0, 60)}.${dl.ext}`,
+        },
+        { quoted: s.msg },
+      );
+      await s.react("✅");
+      return;
+    }
+  }
   const meta = pre ?? (await fetchMeta(target));
   if (meta.duration && meta.duration > MAX_DURATION_S) {
     await s.reply(
@@ -317,6 +336,26 @@ async function startPlay(ctx: CommandContext, input: string): Promise<void> {
     return;
   }
   await ctx.react("🔎");
+  // Names and YouTube links get accurate audio from the free converter first
+  // (YouTube's player API is IP-blocked for yt-dlp here). On failure we fall
+  // back to the interactive SoundCloud/yt-dlp menu below.
+  if (!url || /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(input)) {
+    const dl = await tryYouTubeAudio(input, { maxSizeMb: MAX_AUDIO_MB });
+    if (dl) {
+      await ctx.sock.sendMessage(
+        ctx.from,
+        {
+          audio: dl.buffer,
+          mimetype: dl.mime,
+          fileName: `${(dl.title ?? "audio").replace(/[^\w-]+/g, "_").slice(0, 60)}.${dl.ext}`,
+          caption: dl.title ? `🎵 ${dl.title}` : undefined,
+        },
+        { quoted: ctx.msg },
+      );
+      await ctx.react("✅");
+      return;
+    }
+  }
   const target = url ? input : `${AUDIO_SEARCH_PREFIX}:${input}`;
   try {
     const meta = await fetchMeta(target);

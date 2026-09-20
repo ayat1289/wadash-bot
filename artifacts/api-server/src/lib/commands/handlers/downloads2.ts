@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Command, CommandContext } from "../types";
 import { fetchMeta, download, downloadTikTok, downloadVideoSmart, IS_TIKTOK_URL } from "../ytdlp";
+import { tryYouTubeAudio } from "../youtube-mp3";
 import { fetchBuffer } from "../http-utils";
 import { hostMatches } from "../url-utils";
 import { tryAcquire } from "../limiter";
@@ -122,6 +123,25 @@ async function audioCmd(ctx: CommandContext): Promise<void> {
   }
   await ctx.react("⏳");
   try {
+    // Names and YouTube links first try the free YouTube converter (accurate
+    // songs, no IP block); SoundCloud / yt-dlp remains the fallback.
+    if (!isUrl(input) || /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(input)) {
+      const dl = await tryYouTubeAudio(input, { maxSizeMb: MAX_AUDIO_MB });
+      if (dl) {
+        await ctx.sock.sendMessage(
+          ctx.from,
+          {
+            audio: dl.buffer,
+            mimetype: dl.mime,
+            fileName: `${(dl.title ?? "audio").replace(/[^\w-]+/g, "_").slice(0, 60)}.${dl.ext}`,
+            caption: dl.title ? `🎵 ${dl.title}` : undefined,
+          },
+          { quoted: ctx.msg },
+        );
+        await ctx.react("✅");
+        return;
+      }
+    }
     if (isUrl(input)) {
       if (!hostMatches(input, ALLOWED)) {
         await ctx.reply("❌ That link isn't supported by this command.");
