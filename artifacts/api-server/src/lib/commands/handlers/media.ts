@@ -382,11 +382,4 @@ export const mediaCommands: Command[] = [
     desc: "Convert text to a voice note",
     handler: sayHandler,
   },
-  {
-    name: "togif",
-    aliases: ["gif"],
-    category: "VIDEO",
-    desc: "Convert a replied video/image to a GIF",
-    handler: togifHandler,
-  },
-];
+  ];

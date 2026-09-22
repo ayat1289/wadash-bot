@@ -178,9 +178,6 @@ export const media2Commands: Command[] = [
   { name: "paramount", category: "DOWNLOAD", desc: "Where to stream", handler: streamingLookup },
 
   // Cloud-host file downloads
-  { name: "gdrive", category: "DOWNLOAD", desc: "Google Drive file", handler: fileCmd },
-  { name: "mega", category: "DOWNLOAD", desc: "MEGA file", handler: fileCmd },
-  { name: "dropbox", category: "DOWNLOAD", desc: "Dropbox file", handler: fileCmd },
   { name: "onedrive", category: "DOWNLOAD", desc: "OneDrive file", handler: fileCmd },
   { name: "pixeldrain", category: "DOWNLOAD", desc: "Pixeldrain file", handler: fileCmd },
   { name: "anonfiles", category: "DOWNLOAD", desc: "AnonFiles file", handler: fileCmd },

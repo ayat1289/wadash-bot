@@ -372,48 +372,7 @@ async function karaokeHandler(ctx: CommandContext): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export const downloads2Commands: Command[] = [
-  // Music search / play
-  { name: "music", aliases: ["music"], category: "DOWNLOAD", desc: "Play music (search or link)", handler: audioCmd },
-  { name: "play2", category: "DOWNLOAD", desc: "Play music", handler: audioCmd },
-  { name: "play3", category: "DOWNLOAD", desc: "Play music", handler: audioCmd },
-  { name: "play4", category: "DOWNLOAD", desc: "Play music", handler: audioCmd },
-  { name: "play5", category: "DOWNLOAD", desc: "Play music", handler: audioCmd },
-  { name: "musicsearch", category: "DOWNLOAD", desc: "Search tracks (SoundCloud)", handler: searchHandler },
-  { name: "charts", category: "DOWNLOAD", desc: "Top tracks search", handler: async (ctx) => {
-      const input = arg(ctx);
-      if (!input) {
-        await ctx.reply("Usage: *" + ctx.prefix + "charts <genre/vibe>* — e.g. .charts pop");
-        return;
-      }
-      const items = await listItems(`${AUDIO_SEARCH}:${input}`, 8);
-      await ctx.reply(items.length ? `📈 *Results:*\n${items.map((e, i) => `${i + 1}. ${e.title}`).join("\n")}` : "❌ No results.");
-    } },
-  { name: "trendingmusic", category: "DOWNLOAD", desc: "Trending music search", handler: async (ctx) => {
-      const items = await listItems(`${AUDIO_SEARCH}:trending`, 8);
-      await ctx.reply(items.length ? `🔥 *Trending now:*\n${items.map((e, i) => `${i + 1}. ${e.title}`).join("\n")}` : "❌ No results.");
-    } },
-
-  // Platform audio (link or SoundCloud search fallback)
-  { name: "soundcloud", aliases: ["sc"], category: "DOWNLOAD", desc: "SoundCloud track", handler: audioCmd },
-  { name: "audiomack", category: "DOWNLOAD", desc: "Audiomack track", handler: audioCmd },
-  { name: "bandcamp", category: "DOWNLOAD", desc: "Bandcamp track", handler: audioCmd },
-  { name: "mixcloud", category: "DOWNLOAD", desc: "Mixcloud mix", handler: audioCmd },
-  { name: "deezer", category: "DOWNLOAD", desc: "Deezer track (search fallback)", handler: audioCmd },
-  { name: "tidal", category: "DOWNLOAD", desc: "Tidal track (search fallback)", handler: audioCmd },
-  { name: "jiosaavn", category: "DOWNLOAD", desc: "JioSaavn track", handler: audioCmd },
-  { name: "hungama", category: "DOWNLOAD", desc: "Hungama track", handler: audioCmd },
-  { name: "boomplay", category: "DOWNLOAD", desc: "Boomplay track", handler: audioCmd },
-  { name: "spotifysearch", category: "DOWNLOAD", desc: "Search a track (Spotify-style)", handler: searchHandler },
-  { name: "spotifydl", category: "DOWNLOAD", desc: "Download a track (search fallback)", handler: audioCmd },
-  { name: "spotifyplaylist", category: "DOWNLOAD", desc: "Playlist (search fallback)", handler: audioCmd },
-  { name: "spotifyalbum", category: "DOWNLOAD", desc: "Album (search fallback)", handler: audioCmd },
-  { name: "applemusic", category: "DOWNLOAD", desc: "Apple Music track", handler: audioCmd },
-  { name: "podcast", category: "DOWNLOAD", desc: "Podcast episode (link)", handler: audioCmd },
-  { name: "audiobook", category: "DOWNLOAD", desc: "LibriVox audiobook", handler: audioCmd },
-
   // YouTube
-  { name: "yta", aliases: ["ytaudio"], category: "DOWNLOAD", desc: "YouTube audio (link)", handler: ytAudio },
-  { name: "ytv", aliases: ["ytvideo"], category: "DOWNLOAD", desc: "YouTube video (link)", handler: videoCmd },
   { name: "ytshorts", category: "DOWNLOAD", desc: "YouTube Shorts (link)", handler: videoCmd },
   { name: "ytlive", category: "DOWNLOAD", desc: "YouTube live (link)", handler: videoCmd },
   { name: "ytsearch", category: "DOWNLOAD", desc: "Search YouTube and play a result", handler: searchHandler },
@@ -429,36 +388,11 @@ export const downloads2Commands: Command[] = [
       const items = await listItems(input, 15);
       await ctx.reply(items.length ? `📺 *Latest uploads:*\n${items.map((e, i) => `${i + 1}. ${e.title}`).join("\n")}` : "❌ Couldn't read that channel.");
     } },
-  { name: "ytthumb", category: "DOWNLOAD", desc: "YouTube thumbnail", handler: thumbHandler },
-  { name: "ytinfo", category: "DOWNLOAD", desc: "Video info", handler: infoHandler },
-  { name: "ytcomment", category: "DOWNLOAD", desc: "Video comments (link)", handler: async (ctx) => {
-      const input = arg(ctx);
-      if (!input || !isUrl(input)) return ctx.reply(`Send a *YouTube link*.\nExample: *${ctx.prefix}ytcomment https://youtu.be/...*`);
-      await ctx.reply("💬 Comments aren't available on this build (YouTube blocks the API from this server). Try *" + ctx.prefix + "ytinfo* for video details.");
-    } },
-
   // TikTok
-  { name: "tiktokhd", category: "DOWNLOAD", desc: "TikTok HD video", aliases: ["tt", "tiktok", "tik", "tiktokvideo"], handler: tiktokApiDownload },
+  { name: "tiktokhd", category: "DOWNLOAD", desc: "TikTok HD video", aliases: ["tt", "tiktok", "tik"], handler: tiktokApiDownload },
   { name: "ttmp3", category: "DOWNLOAD", desc: "TikTok audio", handler: async (ctx) => tiktokApiDownload(ctx, true) },
   { name: "ttslide", category: "DOWNLOAD", desc: "TikTok slideshow", handler: videoCmd },
   { name: "xdl", category: "DOWNLOAD", desc: "X (Twitter) video", handler: videoCmd },
-  { name: "threads", category: "DOWNLOAD", desc: "Threads video", handler: videoCmd },
-  { name: "reddit", category: "DOWNLOAD", desc: "Reddit video", handler: videoCmd },
   { name: "vk", category: "DOWNLOAD", desc: "VK video", handler: videoCmd },
-  { name: "bilibili", category: "DOWNLOAD", desc: "Bilibili video", handler: videoCmd },
-  { name: "douyin", category: "DOWNLOAD", desc: "Douyin video", handler: videoCmd },
-  { name: "dailymotion", category: "DOWNLOAD", desc: "Dailymotion video", handler: videoCmd },
-  { name: "vimeo", category: "DOWNLOAD", desc: "Vimeo video", handler: videoCmd },
-  { name: "rumble", category: "DOWNLOAD", desc: "Rumble video", handler: videoCmd },
-  { name: "sharechat", category: "DOWNLOAD", desc: "ShareChat video", handler: videoCmd },
   { name: "snapchat", category: "DOWNLOAD", desc: "Snapchat content", handler: videoCmd },
-  { name: "linkedin", category: "DOWNLOAD", desc: "LinkedIn video", handler: videoCmd },
-  { name: "likee", category: "DOWNLOAD", desc: "Likee video", handler: videoCmd },
-  { name: "kwai", category: "DOWNLOAD", desc: "Kwai video", handler: videoCmd },
-  { name: "capcut", category: "DOWNLOAD", desc: "CapCut template", handler: videoCmd },
-  { name: "ifunny", category: "DOWNLOAD", desc: "iFunny content", handler: videoCmd },
-  { name: "weibo", category: "DOWNLOAD", desc: "Weibo video", handler: videoCmd },
-  { name: "album", category: "DOWNLOAD", desc: "Album cover", handler: thumbHandler },
-  { name: "ringtone", category: "AUDIO", desc: "Make a 30s ringtone", handler: ringtoneHandler },
-  { name: "karaoke", category: "AUDIO", desc: "Remove vocals (karaoke)", handler: karaokeHandler },
 ];

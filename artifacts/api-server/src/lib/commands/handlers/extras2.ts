@@ -326,18 +326,6 @@ export const extras2Commands: Command[] = [
       await sendMedia(ctx, url, true);
     },
   },
-  {
-    name: "reels",
-    category: "DOWNLOAD",
-    desc: "Download an Instagram reel",
-    aliases: ["story", "ig", "instagram", "igvideo"],
-    handler: async (ctx) => {
-      const url = ctx.text.trim();
-      if (!/^https?:\/\/(www\.)?(instagram\.com|instagr\.am|ig\.me)\//i.test(url)) return ctx.reply("❌ Send an Instagram link.");
-      await sendMedia(ctx, url, true);
-    },
-  },
-
   // --- Voice / sticker --------------------------------------------------------
   {
     name: "voicechanger",

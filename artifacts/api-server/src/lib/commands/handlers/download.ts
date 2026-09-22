@@ -681,26 +681,11 @@ export const downloadCommands: Command[] = [
     run: (ctx, input) => fromUrlOrSearch(ctx, input, sendAudio, AUDIO_SEARCH_PREFIX),
   }),
   // --- Video (also listed under the VIDEO menu) ---
-  dl({
-    name: "ytmp4",
-    category: "DOWNLOAD",
-    desc: "Download YouTube video (MP4)",
-    usage: "Usage: *%pytmp4 <YouTube link or search>*",
-    run: (ctx, input) => fromUrlOrSearch(ctx, input, sendVideo),
-  }),
-  dl({
-    name: "video",
-    category: "DOWNLOAD",
-    desc: "Download a video from a link or YouTube search",
-    usage: "Usage: *%pvideo <link or search>*",
-    run: (ctx, input) => fromUrlOrSearch(ctx, input, sendVideo),
-  }),
   // --- Platform-specific video (host-allowlisted) ---
   // (TikTok → `.tiktok`/`.tt` and Instagram → `.ig`/`.reels` live in
   // downloads2.ts / extras2.ts — their yt-dlp paths are IP-blocked, so they use
-  // the tikwm API / SenatorAPI instead. Facebook/X/Pinterest still use yt-dlp.)
-  platformVideo("facebook", ["fb", "fbvideo"], "Download a Facebook video", "Facebook", ["facebook.com", "fb.watch", "fb.com"]),
-  platformVideo("twitter", ["x", "xvideo"], "Download a Twitter/X video", "Twitter/X", ["twitter.com", "x.com"]),
+  // the tikwm API / SenatorAPI instead. X/Pinterest still use yt-dlp.)
+  platformVideo("twitter", ["x"], "Download a Twitter/X video", "Twitter/X", ["twitter.com", "x.com"]),
   dl({
     name: "pinterest",
     category: "DOWNLOAD",
@@ -715,20 +700,6 @@ export const downloadCommands: Command[] = [
     },
   }),
   // --- Special sources ---
-  dl({
-    name: "spotify",
-    category: "DOWNLOAD",
-    desc: "Download a Spotify track's audio by name",
-    usage: "Usage: *%pspotify <Spotify track link>*",
-    run: spotifyHandler,
-  }),
-  dl({
-    name: "gitclone",
-    category: "DOWNLOAD",
-    desc: "Download a GitHub repo as a zip",
-    usage: "Usage: *%pgitclone <github repo link>*",
-    run: gitcloneHandler,
-  }),
   dl({
     name: "mediafire",
     category: "DOWNLOAD",

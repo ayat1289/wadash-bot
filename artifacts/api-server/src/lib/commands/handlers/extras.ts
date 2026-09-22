@@ -661,12 +661,4 @@ export const extrasCommands: Command[] = [
   { name: "fetch", category: "TOOLS", desc: "Fetch a public URL", handler: fetchHandler },
   { name: "timezone", category: "TOOLS", desc: "Time in a timezone", handler: timezoneHandler },
   { name: "morse", category: "TOOLS", desc: "Morse encode/decode", handler: morseHandler },
-
-  // VIDEO
-  {
-    name: "compressvideo",
-    category: "VIDEO",
-    desc: "Compress a replied-to video",
-    handler: compressvideoHandler,
-  },
 ];
