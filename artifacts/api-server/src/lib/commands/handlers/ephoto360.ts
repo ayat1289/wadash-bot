@@ -218,6 +218,4 @@ function effectCommand(name: string, effect: Effect): Command {
   };
 }
 
-export const ephoto360Commands: Command[] = Object.entries(EFFECTS).map(([name, effect]) =>
-  effectCommand(name, effect),
-);
+export const ephoto360Commands: Command[] = [];
