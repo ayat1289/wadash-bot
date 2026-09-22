@@ -1,8 +1,6 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { downloadMediaMessage, type WAMessage } from "@whiskeysockets/baileys";
 import sharp from "sharp";
 import type { Command, CommandContext } from "../types";
@@ -13,7 +11,6 @@ import { runProcess } from "../proc";
 import { getFfmpegPath } from "../ffmpeg";
 import { logger } from "../../logger";
 
-const execFileP = promisify(execFile);
 const UA = "WADashBot/1.0";
 
 function arg(ctx: CommandContext): string {
@@ -253,64 +250,6 @@ async function archiveHandler(ctx: CommandContext): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// .extract — unzip/untar a replied archive and send the files
-// ---------------------------------------------------------------------------
-
-async function extractHandler(ctx: CommandContext): Promise<void> {
-  const slot = tryAcquire(`${ctx.tenantId}:${ctx.sender}`, { concurrency: true });
-  if (!slot.ok) {
-    await ctx.reply(slot.reason);
-    return;
-  }
-  let dir: string | null = null;
-  try {
-    const buf = await quotedBuffer(ctx);
-    if (!buf) {
-      await ctx.reply("🗜️ Reply to a *zip* (or tar) file to extract it.");
-      return;
-    }
-    dir = await mkdtemp(join(tmpdir(), "extract-"));
-    const inPath = join(dir, "in.bin");
-    await writeFile(inPath, buf);
-    await ctx.react("⏳");
-    try {
-      await execFileP("unzip", ["-o", "-q", inPath, "-d", join(dir, "out")], { timeout: 30_000 });
-    } catch {
-      await execFileP("tar", ["-xf", inPath, "-C", join(dir, "out")], { timeout: 30_000 }).catch(() => {
-        throw new Error("unsupported archive");
-      });
-    }
-    const { readdir } = await import("node:fs/promises");
-    const outDir = join(dir, "out");
-    const files = (await readdir(outDir)).slice(0, 5);
-    if (files.length === 0) {
-      await ctx.reply("🗜️ Archive extracted — it was empty.");
-      return;
-    }
-    const sent: string[] = [];
-    for (const f of files) {
-      const full = join(outDir, f);
-      const isImg = /\.(png|jpe?g|webp|gif)$/i.test(f);
-      try {
-        const fb = await readFile(full);
-        if (isImg) await ctx.sock.sendMessage(ctx.from, { image: fb, caption: f }, { quoted: ctx.msg });
-        else await ctx.sock.sendMessage(ctx.from, { document: fb, mimetype: "application/octet-stream", fileName: f }, { quoted: ctx.msg });
-        sent.push(f);
-      } catch {
-        /* skip unreadable entries */
-      }
-    }
-    await ctx.react("✅");
-    if (sent.length === 0) await ctx.reply("🗜️ Couldn't send any extracted files.");
-  } catch (err) {
-    logger.warn({ err }, "extract failed");
-    await ctx.react("❌");
-    await ctx.reply("❌ That file isn't a supported zip/tar archive.");
-  } finally {
-    slot.release();
-    if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {});
-  }
-}
 
 function fetchJson(url: string): Promise<unknown> {
   return fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(20_000) }).then((r) => r.json());
@@ -327,7 +266,6 @@ export const tools2Commands: Command[] = [
   { name: "webinfo", category: "TOOLS", desc: "Inspect a URL", handler: webinfoHandler },
   { name: "wayback", category: "TOOLS", desc: "Wayback Machine lookup", handler: waybackHandler },
   { name: "archive", category: "TOOLS", desc: "Archive a page", handler: archiveHandler },
-  { name: "extract", category: "TOOLS", desc: "Extract a zip/tar", handler: extractHandler },
   { name: "ssweb", category: "TOOLS", desc: "Website screenshot", handler: async (ctx) => ctx.reply("🖥️ `.ssweb` needs a screenshot service/API key — not available in this build yet.") },
   { name: "web2pdf", category: "TOOLS", desc: "Webpage → PDF", handler: async (ctx) => ctx.reply("📄 `.web2pdf` needs a rendering service — not available in this build yet.") },
   { name: "mergepdf", category: "TOOLS", desc: "Merge PDFs", handler: async (ctx) => ctx.reply("📑 `.mergepdf` needs the pdf-lib dependency — not available in this build yet.") },

@@ -1,6 +1,5 @@
 import type { Command } from "../types";
 import { gemini, GEMINI_MODEL } from "@workspace/integrations-gemini";
-import { generateImageBuffer } from "@workspace/integrations-openai-ai-server/image";
 import { tryAcquire } from "../limiter";
 import { logger } from "../../logger";
 
@@ -64,54 +63,8 @@ function chatCommand(
   };
 }
 
-function imageCommand(name: string, aliases: string[] | undefined): Command {
-  return {
-    name,
-    aliases,
-    category: "AI",
-    desc: "Generate an image from a text description",
-    handler: async (ctx) => {
-      const prompt = (ctx.text.trim() || ctx.quotedText?.trim() || "").slice(
-        0,
-        MAX_PROMPT_CHARS,
-      );
-      if (!prompt) {
-        return ctx.reply(
-          `Usage: *${ctx.prefix}${name} <description>*\n` +
-            `Example: *${ctx.prefix}${name} a cat astronaut on the moon, digital art*`,
-        );
-      }
-      const slot = tryAcquire(`${ctx.tenantId}:${ctx.sender}`, { concurrency: true });
-      if (!slot.ok) {
-        await ctx.reply(slot.reason);
-        return;
-      }
-      try {
-        await ctx.react("🎨");
-        const buffer = await generateImageBuffer(prompt, "1024x1024");
-        if (!buffer.length) throw new Error("empty image");
-        await ctx.sock.sendMessage(
-          ctx.from,
-          { image: buffer, caption: `🎨 ${prompt}` },
-          { quoted: ctx.msg },
-        );
-      } catch (err) {
-        logger.warn({ err }, "AI image generation failed");
-        await ctx.reply("❌ Couldn't generate that image right now. Please try again in a moment.");
-      } finally {
-        slot.release();
-      }
-    },
-  };
-}
-
 export const aiCommands: Command[] = [
   chatCommand("gpt", ["gpt4", "chatgpt"], "ChatGPT"),
-  chatCommand("gemini", ["bard"], "Gemini"),
-  chatCommand("claude", undefined, "Claude"),
-  chatCommand("deepseek", undefined, "DeepSeek"),
-  chatCommand("blackbox", undefined, "Blackbox AI"),
   chatCommand("llama", undefined, "Llama"),
   chatCommand("ai", undefined, "the AI"),
-  imageCommand("imagine", ["dalle", "aiimg"]),
 ];
