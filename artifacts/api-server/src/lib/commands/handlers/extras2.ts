@@ -315,17 +315,7 @@ export const extras2Commands: Command[] = [
     },
   },
 
-  // --- Downloads --------------------------------------------------------------
-  {
-    name: "telegram",
-    category: "DOWNLOAD",
-    desc: "Download a Telegram channel post (video)",
-    handler: async (ctx) => {
-      const url = ctx.text.trim();
-      if (!/^https:\/\/t\.me\//i.test(url)) return ctx.reply("❌ Send a `https://t.me/...` link.");
-      await sendMedia(ctx, url, true);
-    },
-  },
+// --- Downloads --------------------------------------------------------------
   // --- Voice / sticker --------------------------------------------------------
   {
     name: "voicechanger",

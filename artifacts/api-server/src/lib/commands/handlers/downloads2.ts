@@ -372,27 +372,10 @@ async function karaokeHandler(ctx: CommandContext): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export const downloads2Commands: Command[] = [
-  // YouTube
-  { name: "ytshorts", category: "DOWNLOAD", desc: "YouTube Shorts (link)", handler: videoCmd },
-  { name: "ytlive", category: "DOWNLOAD", desc: "YouTube live (link)", handler: videoCmd },
-  { name: "ytsearch", category: "DOWNLOAD", desc: "Search YouTube and play a result", handler: searchHandler },
-  { name: "ytplaylist", category: "DOWNLOAD", desc: "List a YouTube playlist", handler: async (ctx) => {
-      const input = arg(ctx);
-      if (!input || !isUrl(input)) return ctx.reply(`Send a *YouTube playlist link*.\nExample: *${ctx.prefix}ytplaylist https://youtube.com/playlist?list=...*`);
-      const items = await listItems(input, 15);
-      await ctx.reply(items.length ? `📋 *Playlist (${items.length}+):*\n${items.map((e, i) => `${i + 1}. ${e.title}`).join("\n")}` : "❌ Couldn't read that playlist (YouTube may be blocking this server).");
-    } },
-  { name: "ytchannel", category: "DOWNLOAD", desc: "List a channel's uploads", handler: async (ctx) => {
-      const input = arg(ctx);
-      if (!input || !isUrl(input)) return ctx.reply(`Send a *channel link*.\nExample: *${ctx.prefix}ytchannel https://youtube.com/@channel*`);
-      const items = await listItems(input, 15);
-      await ctx.reply(items.length ? `📺 *Latest uploads:*\n${items.map((e, i) => `${i + 1}. ${e.title}`).join("\n")}` : "❌ Couldn't read that channel.");
-    } },
   // TikTok
   { name: "tiktokhd", category: "DOWNLOAD", desc: "TikTok HD video", aliases: ["tt", "tiktok", "tik"], handler: tiktokApiDownload },
   { name: "ttmp3", category: "DOWNLOAD", desc: "TikTok audio", handler: async (ctx) => tiktokApiDownload(ctx, true) },
   { name: "ttslide", category: "DOWNLOAD", desc: "TikTok slideshow", handler: videoCmd },
   { name: "xdl", category: "DOWNLOAD", desc: "X (Twitter) video", handler: videoCmd },
   { name: "vk", category: "DOWNLOAD", desc: "VK video", handler: videoCmd },
-  { name: "snapchat", category: "DOWNLOAD", desc: "Snapchat content", handler: videoCmd },
 ];

@@ -681,11 +681,10 @@ export const downloadCommands: Command[] = [
     run: (ctx, input) => fromUrlOrSearch(ctx, input, sendAudio, AUDIO_SEARCH_PREFIX),
   }),
   // --- Video (also listed under the VIDEO menu) ---
-  // --- Platform-specific video (host-allowlisted) ---
+  // --- Platform-specific video ---
   // (TikTok → `.tiktok`/`.tt` and Instagram → `.ig`/`.reels` live in
   // downloads2.ts / extras2.ts — their yt-dlp paths are IP-blocked, so they use
-  // the tikwm API / SenatorAPI instead. X/Pinterest still use yt-dlp.)
-  platformVideo("twitter", ["x"], "Download a Twitter/X video", "Twitter/X", ["twitter.com", "x.com"]),
+  // the tikwm API / SenatorAPI instead.)
   dl({
     name: "pinterest",
     category: "DOWNLOAD",
@@ -706,13 +705,5 @@ export const downloadCommands: Command[] = [
     desc: "Download a file from MediaFire",
     usage: "Usage: *%pmediafire <mediafire link>*",
     run: mediafireHandler,
-  }),
-  dl({
-    name: "apk",
-    category: "DOWNLOAD",
-    desc: "Find an app on the Play Store",
-    usage: "Usage: *%papk <app name>*",
-    heavy: false,
-    run: apkHandler,
   }),
 ];
