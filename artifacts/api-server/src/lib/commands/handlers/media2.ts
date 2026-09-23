@@ -158,56 +158,10 @@ async function retroHandler(ctx: CommandContext): Promise<void> {
 }
 
 export const media2Commands: Command[] = [
-  { name: "movie", category: "DOWNLOAD", desc: "Movie info", handler: async (ctx) => wikiLookup(ctx, "movie") },
-  { name: "series", category: "DOWNLOAD", desc: "TV series info", handler: async (ctx) => wikiLookup(ctx, "series") },
-  { name: "anime", category: "DOWNLOAD", desc: "Anime info", handler: async (ctx) => wikiLookup(ctx, "anime") },
-  { name: "manga", category: "DOWNLOAD", desc: "Manga info", handler: async (ctx) => wikiLookup(ctx, "manga") },
-  { name: "manhwa", category: "DOWNLOAD", desc: "Manhwa info", handler: async (ctx) => wikiLookup(ctx, "manhwa") },
-  { name: "comic", category: "DOWNLOAD", desc: "Comic info", handler: async (ctx) => wikiLookup(ctx, "comic") },
-  { name: "drama", category: "DOWNLOAD", desc: "Drama info", handler: async (ctx) => wikiLookup(ctx, "drama") },
-  { name: "subtitle", category: "DOWNLOAD", desc: "Subtitle lookup", handler: async (ctx) => wikiLookup(ctx, "film") },
-  { name: "trailer", category: "DOWNLOAD", desc: "Movie info (trailer search blocked)", handler: async (ctx) => wikiLookup(ctx, "movie") },
-  { name: "steam", category: "DOWNLOAD", desc: "Steam store lookup", handler: steamHandler },
-  { name: "netflix", category: "DOWNLOAD", desc: "Where to stream (Netflix etc.)", handler: streamingLookup },
-  { name: "primevideo", category: "DOWNLOAD", desc: "Where to stream", handler: streamingLookup },
-  { name: "disney", category: "DOWNLOAD", desc: "Where to stream", handler: streamingLookup },
-  { name: "crunchyroll", category: "DOWNLOAD", desc: "Where to stream", handler: streamingLookup },
-  { name: "hulu", category: "DOWNLOAD", desc: "Where to stream", handler: streamingLookup },
-  { name: "hbo", category: "DOWNLOAD", desc: "Where to stream", handler: streamingLookup },
-  { name: "appletv", category: "DOWNLOAD", desc: "Where to stream", handler: streamingLookup },
-  { name: "paramount", category: "DOWNLOAD", desc: "Where to stream", handler: streamingLookup },
-
-  // Cloud-host file downloads
-  { name: "onedrive", category: "DOWNLOAD", desc: "OneDrive file", handler: fileCmd },
-  { name: "pixeldrain", category: "DOWNLOAD", desc: "Pixeldrain file", handler: fileCmd },
-  { name: "anonfiles", category: "DOWNLOAD", desc: "AnonFiles file", handler: fileCmd },
-  { name: "workupload", category: "DOWNLOAD", desc: "WorkUpload file", handler: fileCmd },
-  { name: "sendcm", category: "DOWNLOAD", desc: "SendCM file", handler: fileCmd },
-  { name: "fileio", category: "DOWNLOAD", desc: "file.io file", handler: fileCmd },
-
+export const media2Commands: Command[] = [
   // APK / archives
-  { name: "apkmod", category: "DOWNLOAD", desc: "APK (link)", handler: fileCmd },
-  { name: "xapk", category: "DOWNLOAD", desc: "XAPK (link)", handler: fileCmd },
-  { name: "obb", category: "DOWNLOAD", desc: "OBB (link)", handler: fileCmd },
   { name: "zip", category: "DOWNLOAD", desc: "Download a zip (link)", handler: fileCmd },
   { name: "rar", category: "DOWNLOAD", desc: "Download a rar (link)", handler: fileCmd },
   { name: "7z", category: "DOWNLOAD", desc: "Download a 7z (link)", handler: fileCmd },
   { name: "iso", category: "DOWNLOAD", desc: "Download an iso (link)", handler: fileCmd },
-
-  // Emulation / gaming
-  { name: "rom", category: "DOWNLOAD", desc: "ROM info", handler: retroHandler },
-  { name: "emulator", category: "DOWNLOAD", desc: "Emulator info", handler: retroHandler },
-  { name: "gameguide", category: "DOWNLOAD", desc: "Game guide lookup", handler: retroHandler },
-  { name: "modgame", category: "DOWNLOAD", desc: "Game mod info", handler: retroHandler },
-  { name: "ppsspp", category: "DOWNLOAD", desc: "PSP emulation info", handler: retroHandler },
-  { name: "ps2", category: "DOWNLOAD", desc: "PS2 info", handler: retroHandler },
-  { name: "psp", category: "DOWNLOAD", desc: "PSP info", handler: retroHandler },
-  { name: "gba", category: "DOWNLOAD", desc: "GBA info", handler: retroHandler },
-  { name: "nds", category: "DOWNLOAD", desc: "NDS info", handler: retroHandler },
-  { name: "3ds", category: "DOWNLOAD", desc: "3DS info", handler: retroHandler },
-  { name: "wii", category: "DOWNLOAD", desc: "Wii info", handler: retroHandler },
-  { name: "switch", category: "DOWNLOAD", desc: "Switch info", handler: retroHandler },
-  { name: "xbox", category: "DOWNLOAD", desc: "Xbox info", handler: retroHandler },
-  { name: "psgame", category: "DOWNLOAD", desc: "PlayStation info", handler: retroHandler },
-  { name: "epicgames", category: "DOWNLOAD", desc: "Epic Games info", handler: retroHandler },
 ];

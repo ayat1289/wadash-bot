@@ -316,6 +316,17 @@ export const extras2Commands: Command[] = [
   },
 
 // --- Downloads --------------------------------------------------------------
+  {
+    name: "ig",
+    category: "DOWNLOAD",
+    desc: "Download an Instagram reel/post",
+    handler: async (ctx) => {
+      const url = ctx.text.trim();
+      if (!/^https?:\/\/(www\.)?(instagram\.com|instagr\.am|ig\.me)\//i.test(url)) return ctx.reply("❌ Send an Instagram link.");
+      await sendMedia(ctx, url, true);
+    },
+  },
+
   // --- Voice / sticker --------------------------------------------------------
   {
     name: "voicechanger",
