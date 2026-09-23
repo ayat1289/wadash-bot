@@ -158,7 +158,6 @@ async function retroHandler(ctx: CommandContext): Promise<void> {
 }
 
 export const media2Commands: Command[] = [
-export const media2Commands: Command[] = [
   // APK / archives
   { name: "zip", category: "DOWNLOAD", desc: "Download a zip (link)", handler: fileCmd },
   { name: "rar", category: "DOWNLOAD", desc: "Download a rar (link)", handler: fileCmd },
