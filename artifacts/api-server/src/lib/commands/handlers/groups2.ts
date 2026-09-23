@@ -53,47 +53,23 @@ async function allParticipantJids(ctx: CommandContext): Promise<string[]> {
 export const groups2Commands: Command[] = [
   // --- Anti-* toggles -------------------------------------------------------
   toggle("antibots", undefined, "Anti-bots (kick verified/bot accounts)", "antibots"),
-  toggle("anticapsspam", undefined, "Anti-CAPS-spam", "anticapsspam"),
-  toggle("anticmdspam", undefined, "Anti-command-spam", "anticmdspam"),
-  toggle("anticontactspam", undefined, "Anti-contact-spam", "anticontactspam"),
-  toggle("antidocspam", undefined, "Anti-document-spam", "antidocspam"),
-  toggle("antiemojispam", undefined, "Anti-emoji-spam", "antiemojispam"),
   toggle("antifake", undefined, "Anti-fake-accounts", "antifake"),
-  toggle("antiflood", undefined, "Anti-flood (kick on message burst)", "antiflood"),
   toggle("antiforwarded", undefined, "Anti-forwarded-messages", "antiforwarded"),
   toggle("antiimage", undefined, "Anti-image-spam", "antiimage"),
   toggle("antikickinactive", undefined, "Anti-inactive-members (auto-kick)", "antikickinactive"),
-  toggle("antilocationspam", undefined, "Anti-location-spam", "antilocationspam"),
   toggle("antimassmention", undefined, "Anti-mass-mention", "antimassmention"),
   toggle("antiraid", undefined, "Anti-raid (auto-remove burst of new members)", "antiraid"),
   toggle("antisticker", undefined, "Anti-sticker-spam", "antisticker"),
   toggle("antivideo", undefined, "Anti-video-spam", "antivideo"),
-  toggle("readonly", undefined, "Read-only group (block all non-admin messages)", "readonly"),
   toggle("verify", undefined, "Member verification on join", "verify"),
   toggle("welcomedm", undefined, "Send welcome message in private chat", "welcomedm"),
   toggle("autocreate", undefined, "Auto-setup new groups", "autocreate"),
   toggle("autopromote", undefined, "Auto-promote new members", "autopromote"),
   toggle("autodemote", undefined, "Auto-demote members who leave", "autodemote"),
-  toggle("autodeletemsg", undefined, "Auto-delete messages", "autodeletemsg"),
   toggle("ghostadmin", undefined, "Ghost admin (silent moderation)", "ghostadmin"),
   toggle("adminlog", undefined, "Log admin actions", "adminlog"),
 
   // --- Parameterized toggles ------------------------------------------------
-  {
-    name: "slowmode",
-    category: "SETTINGS",
-    desc: "Set slow-mode interval in seconds (0 to disable)",
-    groupOnly: true,
-    adminOnly: true,
-    handler: async (ctx) => {
-      const secs = Math.floor(Number(ctx.text.trim()));
-      if (!Number.isFinite(secs) || secs < 0 || secs > 3600) {
-        return ctx.reply(`Usage: *${ctx.prefix}slowmode <seconds>* (0 to disable)`);
-      }
-      await setConfig(`slowmode:${ctx.from}`, String(secs), ctx.tenantId);
-      await ctx.reply(secs === 0 ? "⏱️ Slow-mode is now *OFF*." : `⏱️ Slow-mode is now *${secs}s* between messages.`);
-    },
-  },
   {
     name: "lockdown",
     category: "SETTINGS",
@@ -114,21 +90,6 @@ export const groups2Commands: Command[] = [
     handler: async (ctx) => {
       await setConfig(`lockdown:${ctx.from}`, "false", ctx.tenantId);
       await ctx.reply("🔓 Lockdown lifted — members can send again.");
-    },
-  },
-  {
-    name: "setautodelete",
-    category: "SETTINGS",
-    desc: "Auto-delete every message after N seconds (0 to disable)",
-    groupOnly: true,
-    adminOnly: true,
-    handler: async (ctx) => {
-      const secs = Math.floor(Number(ctx.text.trim()));
-      if (!Number.isFinite(secs) || secs < 0 || secs > 3600) {
-        return ctx.reply(`Usage: *${ctx.prefix}setautodelete <seconds>* (0 to disable)`);
-      }
-      await setConfig(`autodelete:${ctx.from}`, String(secs), ctx.tenantId);
-      await ctx.reply(secs === 0 ? "🧹 Auto-delete is now *OFF*." : `🧹 Messages will auto-delete after *${secs}s*.`);
     },
   },
   {
@@ -183,23 +144,6 @@ export const groups2Commands: Command[] = [
     },
   },
   {
-    name: "joinquestion",
-    category: "SETTINGS",
-    desc: "Ask new members a question before they can stay",
-    groupOnly: true,
-    adminOnly: true,
-    handler: async (ctx) => {
-      const q = ctx.text.trim();
-      if (!q) return ctx.reply(`Usage: *${ctx.prefix}joinquestion <question>* (or "off" to disable)`);
-      if (q.toLowerCase() === "off") {
-        await setConfig(`joinquestion:${ctx.from}`, "", ctx.tenantId);
-        return ctx.reply("❔ Join question is now *OFF*.");
-      }
-      await setConfig(`joinquestion:${ctx.from}`, q, ctx.tenantId);
-      await ctx.reply(`❔ New members must answer: *"${q}"*\nThey reply with *${ctx.prefix}answer <response>* to stay.`);
-    },
-  },
-  {
     name: "featureperm",
     category: "SETTINGS",
     desc: "Restrict a feature to admins only",
@@ -230,36 +174,6 @@ export const groups2Commands: Command[] = [
       const jid = `${num}@s.whatsapp.net`;
       await setConfig(`tempmute:${ctx.from}:${jid}`, String(Date.now() + mins * 60_000), ctx.tenantId);
       await ctx.reply(`🔇 ${num} muted for *${mins} minute(s)*.`);
-    },
-  },
-  {
-    name: "tempadmin",
-    category: "ADMIN",
-    desc: "Temporarily promote a member (minutes)",
-    groupOnly: true,
-    adminOnly: true,
-    botAdminOnly: true,
-    handler: async (ctx) => {
-      const [numRaw, minRaw] = ctx.text.trim().split(/\s+/);
-      const num = numRaw?.replace(/\D/g, "");
-      const mins = Math.floor(Number(minRaw ?? "10"));
-      if (!num || num.length < 6 || !Number.isFinite(mins) || mins < 1 || mins > 1440) {
-        return ctx.reply(`Usage: *${ctx.prefix}tempadmin <number> <minutes>*`);
-      }
-      const jid = `${num}@s.whatsapp.net`;
-      try {
-        await ctx.sock.groupParticipantsUpdate(ctx.from, [jid], "promote");
-        await ctx.reply(`👑 ${num} promoted for *${mins} minute(s)* — will be demoted automatically.`);
-        setTimeout(async () => {
-          try {
-            await ctx.sock.groupParticipantsUpdate(ctx.from, [jid], "demote");
-          } catch {
-            /* already demoted or bot lost admin */
-          }
-        }, mins * 60_000);
-      } catch {
-        await ctx.reply("❌ Couldn't promote (am I admin?).");
-      }
     },
   },
   {

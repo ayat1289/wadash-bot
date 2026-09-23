@@ -253,18 +253,6 @@ export const extras2Commands: Command[] = [
     },
   },
   {
-    name: "confessionmode",
-    category: "ADMIN",
-    desc: "Toggle anonymous confession collection",
-    adminOnly: true,
-    groupOnly: true,
-    handler: async (ctx) => {
-      const g = `${ctx.tenantId}:${ctx.from}`;
-      if (confessionMode.has(g)) { confessionMode.delete(g); await ctx.reply("ℹ️ Confessions now post directly to the group."); }
-      else { confessionMode.add(g); await ctx.reply("🙈 Confessions are now collected privately for admins. Admins can read them with `.confessions`."); }
-    },
-  },
-  {
     name: "confessions",
     category: "ADMIN",
     desc: "Read collected confessions",
