@@ -61,7 +61,6 @@ export const groups2Commands: Command[] = [
   toggle("antiraid", undefined, "Anti-raid (auto-remove burst of new members)", "antiraid"),
   toggle("antisticker", undefined, "Anti-sticker-spam", "antisticker"),
   toggle("antivideo", undefined, "Anti-video-spam", "antivideo"),
-  toggle("verify", undefined, "Member verification on join", "verify"),
   toggle("welcomedm", undefined, "Send welcome message in private chat", "welcomedm"),
   toggle("autocreate", undefined, "Auto-setup new groups", "autocreate"),
   toggle("autopromote", undefined, "Auto-promote new members", "autopromote"),
@@ -176,24 +175,6 @@ export const groups2Commands: Command[] = [
       await ctx.reply(`🔇 ${num} muted for *${mins} minute(s)*.`);
     },
   },
-  {
-    name: "verify",
-    category: "SETTINGS",
-    desc: "Verify a new member with a code",
-    groupOnly: true,
-    adminOnly: true,
-    handler: async (ctx) => {
-      const val = ctx.text.toLowerCase().trim();
-      if (val !== "on" && val !== "off") return ctx.reply(`Usage: *${ctx.prefix}verify on/off*`);
-      await setConfig(`verify:${ctx.from}`, val === "on" ? "true" : "false", ctx.tenantId);
-      await ctx.reply(
-        val === "on"
-          ? `✅ Verification is *ON*. New members get a code; they reply *${ctx.prefix}verify <code>* within 2 minutes or they're removed.`
-          : "✅ Verification is now *OFF*.",
-      );
-    },
-  },
-
   // --- Group utilities -------------------------------------------------------
   {
     name: "bulkpromote",
@@ -347,18 +328,6 @@ export const groups2Commands: Command[] = [
         await ctx.sock.sendMessage(`${owner}@s.whatsapp.net`, { text: `📨 *Feedback from ${ctx.pushName} (${ctx.senderNumber})*\n\n${text}` }).catch(() => {});
       }
       await ctx.reply("📨 Feedback sent. Thanks!");
-    },
-  },
-  {
-    name: "restore",
-    category: "OWNER",
-    desc: "Restore the database from a backup",
-    ownerOnly: true,
-    handler: async (ctx) => {
-      await ctx.reply(
-        "💾 To restore: send the backup `.sql` file here, then reply with *restore-file*.\n\n" +
-          "⚠️ This overwrites the current database. Make a backup first with `.backupdb`.",
-      );
     },
   },
   {

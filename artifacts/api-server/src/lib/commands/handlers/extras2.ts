@@ -175,7 +175,6 @@ export const extras2Commands: Command[] = [
     category: "OWNER",
     desc: "Download a Postgres dump",
     ownerOnly: true,
-    aliases: ["backup"],
     handler: async (ctx) => {
       const url = process.env.DATABASE_URL;
       if (!url) return ctx.reply("❌ DATABASE_URL not set.");
@@ -463,41 +462,6 @@ export const extras2Commands: Command[] = [
       await ctx.reply(`🔒 *Locked:* ${[...set].join(", ")}`);
     },
   },
-  {
-    name: "blacklist",
-    category: "ADMIN",
-    desc: "Blacklist a user from the bot",
-    adminOnly: true,
-    handler: async (ctx) => {
-      const num = ctx.text.trim().replace(/\D/g, "");
-      if (!num) return ctx.reply("❌ Usage: `.blacklist <number>`");
-      blacklist.add(`${ctx.tenantId}:${num}`);
-      await ctx.reply(`🚫 Blacklisted ${num}.`);
-    },
-  },
-  {
-    name: "unblacklist",
-    category: "ADMIN",
-    desc: "Remove a user from the blacklist",
-    adminOnly: true,
-    handler: async (ctx) => {
-      const num = ctx.text.trim().replace(/\D/g, "");
-      if (!num || !blacklist.delete(`${ctx.tenantId}:${num}`)) return ctx.reply("❌ Not blacklisted.");
-      await ctx.reply(`✅ Removed ${num} from the blacklist.`);
-    },
-  },
-  {
-    name: "blacklistlist",
-    category: "ADMIN",
-    desc: "List blacklisted users",
-    adminOnly: true,
-    handler: async (ctx) => {
-      const mine = [...blacklist].filter((k) => k.startsWith(`${ctx.tenantId}:`));
-      if (!mine.length) return ctx.reply("🚫 Blacklist is empty.");
-      await ctx.reply(`🚫 *Blacklisted:*\n\n${mine.map((k) => k.split(":")[1]).join("\n")}`);
-    },
-  },
-
   // --- Join queue / verify -------------------------------------------------------
   //
   // These operate on WhatsApp's REAL join-approval queue (group join-approval
