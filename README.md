@@ -1,14 +1,14 @@
 <div align="center">
 
-![WADASH-BOT Wave](https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=6,11,20&height=170&section=header&text=WADASH-BOT&fontSize=62&fontColor=00E5FF&animation=fadeIn)
+![HEER-MD Wave](https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=6,11,20&height=170&section=header&text=HEER-MD&fontSize=62&fontColor=00E5FF&animation=fadeIn)
 
-![WADASH-BOT Banner](assets/banner.svg)
+![HEER-MD Banner](assets/banner.svg)
 
 ![Typing](https://readme-typing-svg.herokuapp.com?font=Fira+Code&size=26&pause=1000&color=00E5FF&center=true&vCenter=true&width=620&lines=Multi-Device+WhatsApp+Bot;Group+Control+%7C+Media+Downloads;Built+with+TypeScript+and+Baileys)
 
 ---
 
-![WADASH-BOT](https://img.shields.io/badge/WADASH--BOT-MULTI--DEVICE-00E5FF?style=for-the-badge)
+![HEER-MD](https://img.shields.io/badge/HEER--MD-MULTI--DEVICE-00E5FF?style=for-the-badge)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Baileys](https://img.shields.io/badge/Multi--Device-Baileys-25D366?style=for-the-badge)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
@@ -33,7 +33,7 @@
   <img src="https://img.shields.io/badge/-ABOUT-00E5FF?style=for-the-badge" alt="About" />
 </p>
 
-WADASH-BOT is a multi-device WhatsApp bot built in TypeScript on Baileys, focused on group control and media downloads. It is a workspace / pnpm project, with recent work on moderation, backups and download routing.
+HEER-MD is a multi-device WhatsApp bot built in TypeScript on Baileys, focused on group control and media downloads. It is a workspace / pnpm project, with recent work on moderation, backups and download routing.
 
 <div align="center">
 
@@ -47,7 +47,7 @@ WADASH-BOT is a multi-device WhatsApp bot built in TypeScript on Baileys, focuse
 
 <div align="center">
 
-![WADASH-BOT Stats](assets/stats.svg)
+![HEER-MD Stats](assets/stats.svg)
 
 ![Streak](https://github-readme-streak-stats.herokuapp.com/?user=Zxornatoe&theme=tokyonight&hide_border=true)
 
@@ -125,7 +125,7 @@ pnpm run build
   <img src="https://img.shields.io/badge/-STAR_THIS_REPO-FFD700?style=for-the-badge" alt="Star This Repo" />
 </p>
 
-If you use WADASH-BOT, starring the repo helps it get found. Thanks to everyone who contributes and reports issues.
+If you use HEER-MD, starring the repo helps it get found. Thanks to everyone who contributes and reports issues.
 
 <div align="center">
 
@@ -149,14 +149,14 @@ This bot is not made by WhatsApp Inc. Misuse can lead to a WhatsApp ban. Use it 
   <img src="https://img.shields.io/badge/-OWNER-00E5FF?style=for-the-badge" alt="Owner" />
 </p>
 
-**Zxornatoe** — Developer and maintainer of WADASH-BOT.
+**Zxornatoe** — Developer and maintainer of HEER-MD.
 
 ---
 
-> WADASH-BOT — not for sale as a WhatsApp product. Give credit if you reuse or re-upload this work.
+> HEER-MD — not for sale as a WhatsApp product. Give credit if you reuse or re-upload this work.
 
 <div align="center">
 
-![WADASH-BOT Wave Footer](https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=6,11,20&height=120&section=footer)
+![HEER-MD Wave Footer](https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=6,11,20&height=120&section=footer)
 
 </div>
