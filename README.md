@@ -15,11 +15,11 @@
 ![pnpm](https://img.shields.io/badge/pnpm-F69220?style=for-the-badge&logo=pnpm&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-00E5FF?style=for-the-badge)
 
-![Stars](https://img.shields.io/github/stars/Zxornatoe/wadash-bot?style=flat-square&color=00E5FF)
-![Forks](https://img.shields.io/github/forks/Zxornatoe/wadash-bot?style=flat-square&color=00E5FF)
-![Watchers](https://img.shields.io/github/watchers/Zxornatoe/wadash-bot?style=flat-square&color=00E5FF)
-![Repo Size](https://img.shields.io/github/repo-size/Zxornatoe/wadash-bot?style=flat-square&color=00E5FF)
-![Last Commit](https://img.shields.io/github/last-commit/Zxornatoe/wadash-bot?style=flat-square&color=00E5FF)
+![Stars](https://img.shields.io/github/stars/Zxornatoe/Heer-MD?style=flat-square&color=00E5FF)
+![Forks](https://img.shields.io/github/forks/Zxornatoe/Heer-MD?style=flat-square&color=00E5FF)
+![Watchers](https://img.shields.io/github/watchers/Zxornatoe/Heer-MD?style=flat-square&color=00E5FF)
+![Repo Size](https://img.shields.io/github/repo-size/Zxornatoe/Heer-MD?style=flat-square&color=00E5FF)
+![Last Commit](https://img.shields.io/github/last-commit/Zxornatoe/Heer-MD?style=flat-square&color=00E5FF)
 
 </div>
 
