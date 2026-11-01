@@ -23,11 +23,23 @@
 
 </div>
 
+<div align="center">
+
+![Divider](assets/divider.svg)
+
+</div>
+
 <p align="center">
   <img src="https://img.shields.io/badge/-ABOUT-00E5FF?style=for-the-badge" alt="About" />
 </p>
 
 WADASH-BOT is a multi-device WhatsApp bot built in TypeScript on Baileys, focused on group control and media downloads. It is a workspace / pnpm project, with recent work on moderation, backups and download routing.
+
+<div align="center">
+
+![Divider](assets/divider.svg)
+
+</div>
 
 <p align="center">
   <img src="https://img.shields.io/badge/-BOT_STATISTICS-25D366?style=for-the-badge" alt="Bot Statistics" />
@@ -38,6 +50,12 @@ WADASH-BOT is a multi-device WhatsApp bot built in TypeScript on Baileys, focuse
 ![WADASH-BOT Stats](assets/stats.svg)
 
 ![Streak](https://github-readme-streak-stats.herokuapp.com/?user=Zxornatoe&theme=tokyonight&hide_border=true)
+
+</div>
+
+<div align="center">
+
+![Divider](assets/divider.svg)
 
 </div>
 
@@ -56,6 +74,12 @@ WADASH-BOT is a multi-device WhatsApp bot built in TypeScript on Baileys, focuse
 
 </div>
 
+<div align="center">
+
+![Divider](assets/divider.svg)
+
+</div>
+
 <p align="center">
   <img src="https://img.shields.io/badge/-BOT_FEATURES-00E5FF?style=for-the-badge" alt="Bot Features" />
 </p>
@@ -69,6 +93,12 @@ WADASH-BOT is a multi-device WhatsApp bot built in TypeScript on Baileys, focuse
 | Media Downloads | TikTok / Instagram download routing | LIVE |
 | Audio Downloads | YouTube audio via free converters, with fallbacks | LIVE |
 | Docker Support | Docker-based setup for self-hosting | LIVE |
+
+<div align="center">
+
+![Divider](assets/divider.svg)
+
+</div>
 
 <p align="center">
   <img src="https://img.shields.io/badge/-INSTALLATION-25D366?style=for-the-badge" alt="Installation" />
@@ -85,17 +115,35 @@ pnpm install
 pnpm run build
 ```
 
+<div align="center">
+
+![Divider](assets/divider.svg)
+
+</div>
+
 <p align="center">
   <img src="https://img.shields.io/badge/-STAR_THIS_REPO-FFD700?style=for-the-badge" alt="Star This Repo" />
 </p>
 
 If you use WADASH-BOT, starring the repo helps it get found. Thanks to everyone who contributes and reports issues.
 
+<div align="center">
+
+![Divider](assets/divider.svg)
+
+</div>
+
 <p align="center">
   <img src="https://img.shields.io/badge/-REMINDER-FF4D4D?style=for-the-badge" alt="Reminder" />
 </p>
 
 This bot is not made by WhatsApp Inc. Misuse can lead to a WhatsApp ban. Use it at your own risk.
+
+<div align="center">
+
+![Divider](assets/divider.svg)
+
+</div>
 
 <p align="center">
   <img src="https://img.shields.io/badge/-OWNER-00E5FF?style=for-the-badge" alt="Owner" />
