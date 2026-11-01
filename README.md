@@ -35,11 +35,7 @@ WADASH-BOT is a multi-device WhatsApp bot built in TypeScript on Baileys, focuse
 
 <div align="center">
 
-![GitHub Stats](https://github-readme-stats.vercel.app/api?username=Zxornatoe&show_icons=true&theme=tokyonight&hide_border=true&count_private=false)
-
-![Top Languages](https://github-readme-stats.vercel.app/api/top-langs/?username=Zxornatoe&layout=compact&theme=tokyonight&hide_border=true)
-
-![WADASH-BOT Repo](https://github-readme-stats.vercel.app/api/pin/?username=Zxornatoe&repo=wadash-bot&theme=tokyonight&hide_border=true)
+![WADASH-BOT Stats](assets/stats.svg)
 
 ![Streak](https://github-readme-streak-stats.herokuapp.com/?user=Zxornatoe&theme=tokyonight&hide_border=true)
 
